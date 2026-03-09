@@ -26,19 +26,96 @@ function getTimeoutMs(): number {
   return vscode.workspace.getConfiguration("docs-capacitor").get<number>("timeoutMs", 300_000);
 }
 
-/** Ask the user to pick a scenario file, falling back to the configured default. */
+/** Discover scenario.yaml files in the workspace (mirrors ScenarioProvider logic). */
+function discoverScenarioFiles(): Array<{ label: string; description: string; path: string }> {
+  const results: Array<{ label: string; description: string; path: string }> = [];
+  const roots = vscode.workspace.workspaceFolders ?? [];
+
+  for (const folder of roots) {
+    const wsRoot = folder.uri.fsPath;
+    walkForYaml(wsRoot, 0, 3, results, wsRoot);
+  }
+  return results;
+}
+
+function walkForYaml(
+  dir: string,
+  depth: number,
+  maxDepth: number,
+  results: Array<{ label: string; description: string; path: string }>,
+  wsRoot: string,
+): void {
+  if (depth > maxDepth) { return; }
+  let entries: import("fs").Dirent[];
+  try {
+    const fs = require("fs");
+    entries = fs.readdirSync(dir, { withFileTypes: true });
+  } catch { return; }
+  const fs = require("fs");
+  const yaml = require("js-yaml");
+  for (const entry of entries) {
+    if (["node_modules", ".git", "out", "__pycache__"].includes(entry.name)) { continue; }
+    const full = path.join(dir, entry.name);
+    if (entry.isFile() && entry.name === "scenario.yaml") {
+      try {
+        const raw = fs.readFileSync(full, "utf-8");
+        const doc = yaml.load(raw) as { name?: string; product?: { name?: string } } | undefined;
+        const scenarioName = doc?.name ?? path.basename(path.dirname(full));
+        const productName = doc?.product?.name ?? "";
+        const relPath = path.relative(wsRoot, full);
+        results.push({
+          label: `$(beaker) ${scenarioName}`,
+          description: productName ? `${productName}  —  ${relPath}` : relPath,
+          path: full,
+        });
+      } catch { /* skip unparseable */ }
+    } else if (entry.isDirectory()) {
+      walkForYaml(full, depth + 1, maxDepth, results, wsRoot);
+    }
+  }
+}
+
+/** Show a QuickPick of discovered scenarios, or fall back to file browser. */
 async function pickScenario(title: string): Promise<string | undefined> {
   const config = vscode.workspace.getConfiguration("docs-capacitor");
   const defaultScenario = config.get<string>("defaultScenario", "");
   if (defaultScenario) {
     return defaultScenario;
   }
-  const picked = await vscode.window.showOpenDialog({
-    canSelectMany: false,
-    filters: { "YAML files": ["yaml", "yml"] },
-    title,
-  });
-  return picked?.[0]?.fsPath;
+
+  const scenarios = discoverScenarioFiles();
+
+  if (scenarios.length === 1) {
+    return scenarios[0].path;
+  }
+
+  if (scenarios.length > 1) {
+    const picked = await vscode.window.showQuickPick(scenarios, {
+      placeHolder: title,
+      matchOnDescription: true,
+    });
+    return picked?.path;
+  }
+
+  // No scenarios found — fall back to file browser
+  const browseItem = await vscode.window.showInformationMessage(
+    "No scenario.yaml files found in this workspace. Browse for one?",
+    "Browse…",
+    "Create New Scenario",
+  );
+  if (browseItem === "Create New Scenario") {
+    vscode.commands.executeCommand("docs-capacitor.createScenario");
+    return undefined;
+  }
+  if (browseItem === "Browse…") {
+    const picked = await vscode.window.showOpenDialog({
+      canSelectMany: false,
+      filters: { "YAML files": ["yaml", "yml"] },
+      title,
+    });
+    return picked?.[0]?.fsPath;
+  }
+  return undefined;
 }
 
 export function activate(context: vscode.ExtensionContext): void {
@@ -173,8 +250,8 @@ export function activate(context: vscode.ExtensionContext): void {
 
   // --- Run Freshness Check ---
   context.subscriptions.push(
-    vscode.commands.registerCommand("docs-capacitor.check", async () => {
-      const scenarioPath = await pickScenario("Select a scenario file");
+    vscode.commands.registerCommand("docs-capacitor.check", async (scenarioPathArg?: string) => {
+      const scenarioPath = scenarioPathArg ?? await pickScenario("Select a scenario to check");
       if (!scenarioPath) {
         return;
       }
@@ -198,8 +275,8 @@ export function activate(context: vscode.ExtensionContext): void {
 
   // --- Validate Scenario ---
   context.subscriptions.push(
-    vscode.commands.registerCommand("docs-capacitor.validate", async () => {
-      const scenarioPath = await pickScenario("Select a scenario file to validate");
+    vscode.commands.registerCommand("docs-capacitor.validate", async (scenarioPathArg?: string) => {
+      const scenarioPath = scenarioPathArg ?? await pickScenario("Select a scenario to validate");
       if (!scenarioPath) {
         return;
       }
