@@ -7,13 +7,42 @@ import * as path from "path";
 /** A single page result from the freshness pipeline. */
 export interface PageResult {
   url: string;
+  title?: string;
   classification: string;
   confidence: number;
   topic?: string;
   reason?: string;
   suggested_fix?: string;
   evidence?: string;
+  regex_evidence?: string;
   regex_signals?: string[];
+  regex_signal?: string;
+  release_conflict_section?: string;
+  agrees_with_regex?: boolean;
+  repo?: string;
+}
+
+/** Extract a human-readable title from a Learn URL path segment. */
+function titleFromUrl(url: string): string {
+  if (!url) { return "(unknown)"; }
+  try {
+    const pathname = new URL(url).pathname;
+    const last = pathname.replace(/\/$/, "").split("/").pop() ?? "";
+    return last.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()) || url;
+  } catch {
+    return url;
+  }
+}
+
+/** Shorten a URL for display — show just the path after the domain. */
+function shortenUrl(url: string): string {
+  try {
+    const u = new URL(url);
+    const shortened = u.pathname.replace(/^\/en-us\//, "");
+    return shortened.length > 60 ? "…" + shortened.slice(-57) : shortened;
+  } catch {
+    return url;
+  }
 }
 
 /** Classification display order and metadata. */
@@ -172,20 +201,24 @@ export class ResultsProvider implements vscode.TreeDataProvider<ResultItem> {
       .filter((r) => r.classification === classification)
       .map((r) => {
         const reviewed = this.reviewed.has(r.url);
-        const label = r.url;
+        // Show title or last URL segment as the label, full URL as description
+        const displayTitle = r.title || titleFromUrl(r.url);
+        const shortUrl = shortenUrl(r.url);
         const item = new ResultItem(
-          label,
+          displayTitle,
           "page",
           vscode.TreeItemCollapsibleState.Collapsed,
           classification,
           r,
         );
-        const parts: string[] = [`${(r.confidence * 100).toFixed(0)}%`];
+        const parts: string[] = [shortUrl];
         if (r.topic) { parts.push(r.topic); }
         item.description = parts.join(" · ");
         item.tooltip = new vscode.MarkdownString(
-          `**${r.url}**\n\nClassification: ${r.classification}  \nConfidence: ${(r.confidence * 100).toFixed(0)}%` +
+          `**${displayTitle}**\n\n${r.url}\n\nClassification: ${r.classification}  \nConfidence: ${(r.confidence * 100).toFixed(0)}%` +
           (r.topic ? `  \nTopic: ${r.topic}` : "") +
+          (r.reason ? `  \nReason: ${r.reason}` : "") +
+          (r.suggested_fix ? `  \nFix: ${r.suggested_fix}` : "") +
           (reviewed ? "\n\n✅ _Reviewed_" : ""),
         );
         item.iconPath = reviewed
@@ -203,19 +236,25 @@ export class ResultsProvider implements vscode.TreeDataProvider<ResultItem> {
 
   private getDetails(r: PageResult): ResultItem[] {
     const items: ResultItem[] = [];
-    const add = (label: string, value: string | undefined): void => {
+    const add = (label: string, value: string | undefined, icon = "info"): void => {
       if (!value) { return; }
       const item = new ResultItem(label, "detail", vscode.TreeItemCollapsibleState.None);
       item.description = value;
-      item.tooltip = `${label}: ${value}`;
+      item.tooltip = new vscode.MarkdownString(`**${label}**\n\n${value}`);
       item.contextValue = "detail";
-      item.iconPath = new vscode.ThemeIcon("info");
+      item.iconPath = new vscode.ThemeIcon(icon);
       items.push(item);
     };
 
-    add("Reason", r.reason);
-    add("Suggested Fix", r.suggested_fix);
-    add("Evidence", r.evidence);
+    add("Confidence", `${(r.confidence * 100).toFixed(0)}%`, "dashboard");
+    add("Reason", r.reason, "comment");
+    add("Suggested Fix", r.suggested_fix, "lightbulb");
+    add("Evidence", r.evidence, "search");
+    add("Regex Evidence", r.regex_evidence, "regex");
+    add("Release Section", r.release_conflict_section, "bookmark");
+    if (r.agrees_with_regex !== undefined) {
+      add("Agrees with Regex", r.agrees_with_regex ? "Yes ✓" : "No ✗", r.agrees_with_regex ? "check" : "close");
+    }
 
     if (r.regex_signals && r.regex_signals.length > 0) {
       const item = new ResultItem(
@@ -224,7 +263,7 @@ export class ResultsProvider implements vscode.TreeDataProvider<ResultItem> {
         vscode.TreeItemCollapsibleState.None,
       );
       item.description = r.regex_signals.join(", ");
-      item.tooltip = `Regex Signals: ${r.regex_signals.join(", ")}`;
+      item.tooltip = new vscode.MarkdownString(`**Regex Signals**\n\n${r.regex_signals.join(", ")}`);
       item.contextValue = "detail";
       item.iconPath = new vscode.ThemeIcon("regex");
       items.push(item);
@@ -281,24 +320,54 @@ export class ResultsProvider implements vscode.TreeDataProvider<ResultItem> {
       return;
     }
 
-    // Prefer classifications.json
-    const jsonPath = path.join(workspaceRoot, "output", "classifications.json");
-    if (fs.existsSync(jsonPath)) {
+    // Prefer classifications.json — check output/ and output/*/ subdirectories
+    const outputDir = path.join(workspaceRoot, "output");
+    const jsonCandidates = [path.join(outputDir, "classifications.json")];
+    if (fs.existsSync(outputDir)) {
+      try {
+        for (const entry of fs.readdirSync(outputDir, { withFileTypes: true })) {
+          if (entry.isDirectory()) {
+            jsonCandidates.push(path.join(outputDir, entry.name, "classifications.json"));
+          }
+        }
+      } catch { /* ignore */ }
+    }
+
+    // Use the most recently modified classifications.json
+    let jsonPath: string | undefined;
+    let latestMtime = 0;
+    for (const candidate of jsonCandidates) {
+      if (fs.existsSync(candidate)) {
+        const mtime = fs.statSync(candidate).mtimeMs;
+        if (mtime > latestMtime) {
+          latestMtime = mtime;
+          jsonPath = candidate;
+        }
+      }
+    }
+
+    if (jsonPath) {
       try {
         const raw = fs.readFileSync(jsonPath, "utf-8");
         const data: unknown = JSON.parse(raw);
         if (Array.isArray(data)) {
           this.results = data.map((item: Record<string, unknown>) => ({
             url: String(item["url"] ?? ""),
+            title: item["title"] != null ? String(item["title"]) : undefined,
             classification: String(item["classification"] ?? "unknown"),
             confidence: Number(item["confidence"] ?? 0),
             topic: item["topic"] != null ? String(item["topic"]) : undefined,
             reason: item["reason"] != null ? String(item["reason"]) : undefined,
             suggested_fix: item["suggested_fix"] != null ? String(item["suggested_fix"]) : undefined,
             evidence: item["evidence"] != null ? String(item["evidence"]) : undefined,
+            regex_evidence: item["regex_evidence"] != null ? String(item["regex_evidence"]) : undefined,
             regex_signals: Array.isArray(item["regex_signals"])
               ? (item["regex_signals"] as unknown[]).map(String)
               : undefined,
+            regex_signal: item["regex_signal"] != null ? String(item["regex_signal"]) : undefined,
+            release_conflict_section: item["release_conflict_section"] != null ? String(item["release_conflict_section"]) : undefined,
+            agrees_with_regex: item["agrees_with_regex"] != null ? Boolean(item["agrees_with_regex"]) : undefined,
+            repo: item["repo"] != null ? String(item["repo"]) : undefined,
           }));
         }
         return;

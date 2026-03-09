@@ -37,10 +37,13 @@ search:
     queries:
       - "GitHub Copilot Visual Studio"
       - "GitHub Copilot install Visual Studio"
-      - "Copilot agent mode Visual Studio"
       - "Copilot extension marketplace Visual Studio"
-      - "GitHub Copilot chat Visual Studio"
-      - "Copilot code completions Visual Studio"
+
+    # path_scopes limit Learn search to specific doc areas.
+    # Each query is run once per scope (3 queries × 8 scopes = 24 searches).
+    # Scopes match the URL path prefix on learn.microsoft.com, e.g.
+    #   "/en-us/visualstudio/" → only results under learn.microsoft.com/en-us/visualstudio/...
+    # An empty string "" means "no scope filter" (search all of Learn).
     path_scopes:
       - "/en-us/visualstudio/"
       - "/en-us/azure/devops/"
@@ -84,6 +87,7 @@ url_filters:
     - /azure/copilot/
     - /office365/
     - /release-notes/
+    - copilot-for-azure
 
 detection:
   regex_rules: rules.yaml
@@ -97,6 +101,8 @@ detection:
       - "Copilot features appear in the Edit menu or via Ctrl+/ in Visual Studio 2022 17.10+."
       - "Copilot Free plan is available — no paid subscription required to start."
       - "Visual Studio Installer is the correct install path for Copilot components."
+      - "EXCEPTION: GitHub Copilot for Azure (a separate extension) IS still installed via the marketplace — this is NOT the same as GitHub Copilot itself."
+      - "Articles about 'Copilot for Azure' or the Azure extension are NOT outdated when they reference marketplace install."
     max_article_chars: 8000
     rate_limit_rpm: 10
 
@@ -119,3 +125,4 @@ reporting:
   formats:
     - markdown
     - csv
+    - json

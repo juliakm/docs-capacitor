@@ -16,3 +16,4 @@ def register_reporter(name: str):
 # Import built-in reporters to trigger registration
 from capacitor.reporters.markdown import MarkdownReporter  # noqa: E402,F401
 from capacitor.reporters.csv_report import CSVReporter  # noqa: E402,F401
+from capacitor.reporters.json_report import JSONReporter  # noqa: E402,F401
