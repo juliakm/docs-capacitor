@@ -107,7 +107,7 @@ def _gh_search_code(
     total = len(orgs)
     for idx, org in enumerate(orgs, 1):
         full_query = f"{query} org:{org}"
-        print(f"    [{idx}/{total}] gh search code '{query[:40]}' org:{org}", end="", flush=True)
+        print(f"    [{idx}/{total}] gh search code '{query}' org:{org}", end="", flush=True)
         cmd = [
             "gh", "search", "code", full_query,
             "--extension", "md",
