@@ -1,13 +1,13 @@
 # Copilot VS — Documentation Freshness Report
 
-Generated at: 2026-03-09T19:01:17.875581+00:00
+Generated at: 2026-03-09T19:13:36.488118+00:00
 
 ## Summary
-- Total pages scanned: 335
+- Total pages scanned: 346
 - P0_OUTDATED: 0
 - NEEDS_CLARIFICATION: 0
 - UP_TO_DATE: 0
-- EXCLUDED: 335
+- EXCLUDED: 346
 
 ## Release Notes Ground Truth
 - Source: https://learn.microsoft.com/en-us/visualstudio/releases/2026/release-notes
@@ -336,22 +336,33 @@ Generated at: 2026-03-09T19:01:17.875581+00:00
 | https://learn.microsoft.com/en-us/credentials/applied-skills/accelerate-app-development-by-using-github-copilot/ | none |  |  |  | EXCLUDED | False | high | Page is out of scope: does not mention both the product and tool. |  |
 | https://learn.microsoft.com/en-us/dotnet/core/porting/github-copilot-app-modernization/how-to-upgrade-with-github-copilot | none |  |  |  | EXCLUDED | False | high | Page is out of scope: does not mention both the product and tool. |  |
 | https://learn.microsoft.com/en-us/dotnet/core/porting/github-copilot-app-modernization/overview | none |  |  |  | EXCLUDED | False | high | Page is out of scope: does not mention both the product and tool. |  |
+| https://learn.microsoft.com/en-us/ssms/github-copilot/get-started | none |  |  |  | EXCLUDED | False | high | Page is out of scope: does not mention both the product and tool. |  |
 | https://learn.microsoft.com/en-us/training/modules/advanced-github-copilot/ | none |  |  |  | EXCLUDED | False | high | Page is out of scope: does not mention both the product and tool. |  |
 | https://learn.microsoft.com/en-us/training/modules/develop-unit-tests-using-github-copilot-tools/ | none |  |  |  | EXCLUDED | False | high | Page is out of scope: does not mention both the product and tool. |  |
+| https://learn.microsoft.com/en-us/training/modules/developer-use-cases-for-ai-with-github-copilot/ | none |  |  |  | EXCLUDED | False | high | Page is out of scope: does not mention both the product and tool. |  |
 | https://learn.microsoft.com/en-us/training/modules/get-started-github-copilot/ | none |  |  |  | EXCLUDED | False | high | Page is out of scope: does not mention both the product and tool. |  |
 | https://learn.microsoft.com/en-us/training/modules/github-copilot-across-environments/ | none |  |  |  | EXCLUDED | False | high | Page is out of scope: does not mention both the product and tool. |  |
 | https://learn.microsoft.com/en-us/training/modules/introduction-copilot-python/ | none |  |  |  | EXCLUDED | False | high | Page is out of scope: does not mention both the product and tool. |  |
 | https://learn.microsoft.com/en-us/training/modules/introduction-prompt-engineering-with-github-copilot/ | none |  |  |  | EXCLUDED | False | high | Page is out of scope: does not mention both the product and tool. |  |
+| https://learn.microsoft.com/en-us/training/modules/responsible-ai-with-github-copilot/ | none |  |  |  | EXCLUDED | False | high | Page is out of scope: does not mention both the product and tool. |  |
+| https://learn.microsoft.com/en-us/troubleshoot/developer/visualstudio/debuggers/troubleshooting-breakpoints | none |  |  |  | EXCLUDED | False | high | Page is out of scope: does not mention both the product and tool. |  |
 | https://learn.microsoft.com/en-us/visualstudio/ | none |  |  |  | EXCLUDED | False | high | Page is out of scope: does not mention both the product and tool. |  |
+| https://learn.microsoft.com/en-us/visualstudio/get-started/visual-studio-ide | none |  |  |  | EXCLUDED | False | high | Page is out of scope: does not mention both the product and tool. |  |
 | https://learn.microsoft.com/en-us/visualstudio/ide/ai-assisted-development-visual-studio | none |  |  |  | EXCLUDED | False | high | Page is out of scope: does not mention both the product and tool. |  |
 | https://learn.microsoft.com/en-us/visualstudio/ide/copilot-agent-mode | none |  |  |  | EXCLUDED | False | high | Page is out of scope: does not mention both the product and tool. |  |
 | https://learn.microsoft.com/en-us/visualstudio/ide/copilot-chat-context | none |  |  |  | EXCLUDED | False | high | Page is out of scope: does not mention both the product and tool. |  |
 | https://learn.microsoft.com/en-us/visualstudio/ide/copilot-free-plan | none |  |  |  | EXCLUDED | False | high | Page is out of scope: does not mention both the product and tool. |  |
+| https://learn.microsoft.com/en-us/visualstudio/ide/finding-and-using-visual-studio-extensions | P0 | MANAGE_EXTENSIONS |  |  | EXCLUDED | False | high | Page is out of scope: does not mention both the product and tool. |  |
 | https://learn.microsoft.com/en-us/visualstudio/ide/mcp-servers | none |  |  |  | EXCLUDED | False | high | Page is out of scope: does not mention both the product and tool. |  |
+| https://learn.microsoft.com/en-us/visualstudio/ide/signing-in-to-visual-studio | none |  |  |  | EXCLUDED | False | high | Page is out of scope: does not mention both the product and tool. |  |
 | https://learn.microsoft.com/en-us/visualstudio/ide/visual-studio-github-copilot-chat | none |  |  |  | EXCLUDED | False | high | Page is out of scope: does not mention both the product and tool. |  |
+| https://learn.microsoft.com/en-us/visualstudio/ide/visual-studio-github-copilot-extension | none |  |  |  | EXCLUDED | False | high | Page is out of scope: does not mention both the product and tool. |  |
 | https://learn.microsoft.com/en-us/visualstudio/ide/visual-studio-github-copilot-get-started | none |  |  |  | EXCLUDED | False | high | Page is out of scope: does not mention both the product and tool. |  |
 | https://learn.microsoft.com/en-us/visualstudio/ide/visual-studio-github-copilot-troubleshoot | none |  |  |  | EXCLUDED | False | high | Page is out of scope: does not mention both the product and tool. |  |
 | https://learn.microsoft.com/en-us/visualstudio/ide/work-with-github-accounts | none |  |  |  | EXCLUDED | False | high | Page is out of scope: does not mention both the product and tool. |  |
+| https://learn.microsoft.com/en-us/visualstudio/install/create-a-network-installation-of-visual-studio | none |  |  |  | EXCLUDED | False | high | Page is out of scope: does not mention both the product and tool. |  |
+| https://learn.microsoft.com/en-us/visualstudio/test/github-copilot-test-dotnet-overview | none |  |  |  | EXCLUDED | False | high | Page is out of scope: does not mention both the product and tool. |  |
+| https://learn.microsoft.com/en-us/visualstudio/version-control/git-with-visual-studio | none |  |  |  | EXCLUDED | False | high | Page is out of scope: does not mention both the product and tool. |  |
 | https://learn.microsoft.com/en-us/visualstudio/windows/ | none |  |  |  | EXCLUDED | False | high | Page is out of scope: does not mention both the product and tool. |  |
 
 ## Classification vs Regex Disagreements
@@ -627,20 +638,31 @@ Generated at: 2026-03-09T19:01:17.875581+00:00
 - https://learn.microsoft.com/en-us/credentials/applied-skills/accelerate-app-development-by-using-github-copilot/: regex=none vs classification=EXCLUDED (regex_rules=none; release_note_ref=none; Page is out of scope: does not mention both the product and tool.)
 - https://learn.microsoft.com/en-us/dotnet/core/porting/github-copilot-app-modernization/how-to-upgrade-with-github-copilot: regex=none vs classification=EXCLUDED (regex_rules=none; release_note_ref=none; Page is out of scope: does not mention both the product and tool.)
 - https://learn.microsoft.com/en-us/dotnet/core/porting/github-copilot-app-modernization/overview: regex=none vs classification=EXCLUDED (regex_rules=none; release_note_ref=none; Page is out of scope: does not mention both the product and tool.)
+- https://learn.microsoft.com/en-us/ssms/github-copilot/get-started: regex=none vs classification=EXCLUDED (regex_rules=none; release_note_ref=none; Page is out of scope: does not mention both the product and tool.)
 - https://learn.microsoft.com/en-us/training/modules/advanced-github-copilot/: regex=none vs classification=EXCLUDED (regex_rules=none; release_note_ref=none; Page is out of scope: does not mention both the product and tool.)
 - https://learn.microsoft.com/en-us/training/modules/develop-unit-tests-using-github-copilot-tools/: regex=none vs classification=EXCLUDED (regex_rules=none; release_note_ref=none; Page is out of scope: does not mention both the product and tool.)
+- https://learn.microsoft.com/en-us/training/modules/developer-use-cases-for-ai-with-github-copilot/: regex=none vs classification=EXCLUDED (regex_rules=none; release_note_ref=none; Page is out of scope: does not mention both the product and tool.)
 - https://learn.microsoft.com/en-us/training/modules/get-started-github-copilot/: regex=none vs classification=EXCLUDED (regex_rules=none; release_note_ref=none; Page is out of scope: does not mention both the product and tool.)
 - https://learn.microsoft.com/en-us/training/modules/github-copilot-across-environments/: regex=none vs classification=EXCLUDED (regex_rules=none; release_note_ref=none; Page is out of scope: does not mention both the product and tool.)
 - https://learn.microsoft.com/en-us/training/modules/introduction-copilot-python/: regex=none vs classification=EXCLUDED (regex_rules=none; release_note_ref=none; Page is out of scope: does not mention both the product and tool.)
 - https://learn.microsoft.com/en-us/training/modules/introduction-prompt-engineering-with-github-copilot/: regex=none vs classification=EXCLUDED (regex_rules=none; release_note_ref=none; Page is out of scope: does not mention both the product and tool.)
+- https://learn.microsoft.com/en-us/training/modules/responsible-ai-with-github-copilot/: regex=none vs classification=EXCLUDED (regex_rules=none; release_note_ref=none; Page is out of scope: does not mention both the product and tool.)
+- https://learn.microsoft.com/en-us/troubleshoot/developer/visualstudio/debuggers/troubleshooting-breakpoints: regex=none vs classification=EXCLUDED (regex_rules=none; release_note_ref=none; Page is out of scope: does not mention both the product and tool.)
 - https://learn.microsoft.com/en-us/visualstudio/: regex=none vs classification=EXCLUDED (regex_rules=none; release_note_ref=none; Page is out of scope: does not mention both the product and tool.)
+- https://learn.microsoft.com/en-us/visualstudio/get-started/visual-studio-ide: regex=none vs classification=EXCLUDED (regex_rules=none; release_note_ref=none; Page is out of scope: does not mention both the product and tool.)
 - https://learn.microsoft.com/en-us/visualstudio/ide/ai-assisted-development-visual-studio: regex=none vs classification=EXCLUDED (regex_rules=none; release_note_ref=none; Page is out of scope: does not mention both the product and tool.)
 - https://learn.microsoft.com/en-us/visualstudio/ide/copilot-agent-mode: regex=none vs classification=EXCLUDED (regex_rules=none; release_note_ref=none; Page is out of scope: does not mention both the product and tool.)
 - https://learn.microsoft.com/en-us/visualstudio/ide/copilot-chat-context: regex=none vs classification=EXCLUDED (regex_rules=none; release_note_ref=none; Page is out of scope: does not mention both the product and tool.)
 - https://learn.microsoft.com/en-us/visualstudio/ide/copilot-free-plan: regex=none vs classification=EXCLUDED (regex_rules=none; release_note_ref=none; Page is out of scope: does not mention both the product and tool.)
+- https://learn.microsoft.com/en-us/visualstudio/ide/finding-and-using-visual-studio-extensions: regex=P0 vs classification=EXCLUDED (regex_rules=MANAGE_EXTENSIONS; release_note_ref=none; Page is out of scope: does not mention both the product and tool.)
 - https://learn.microsoft.com/en-us/visualstudio/ide/mcp-servers: regex=none vs classification=EXCLUDED (regex_rules=none; release_note_ref=none; Page is out of scope: does not mention both the product and tool.)
+- https://learn.microsoft.com/en-us/visualstudio/ide/signing-in-to-visual-studio: regex=none vs classification=EXCLUDED (regex_rules=none; release_note_ref=none; Page is out of scope: does not mention both the product and tool.)
 - https://learn.microsoft.com/en-us/visualstudio/ide/visual-studio-github-copilot-chat: regex=none vs classification=EXCLUDED (regex_rules=none; release_note_ref=none; Page is out of scope: does not mention both the product and tool.)
+- https://learn.microsoft.com/en-us/visualstudio/ide/visual-studio-github-copilot-extension: regex=none vs classification=EXCLUDED (regex_rules=none; release_note_ref=none; Page is out of scope: does not mention both the product and tool.)
 - https://learn.microsoft.com/en-us/visualstudio/ide/visual-studio-github-copilot-get-started: regex=none vs classification=EXCLUDED (regex_rules=none; release_note_ref=none; Page is out of scope: does not mention both the product and tool.)
 - https://learn.microsoft.com/en-us/visualstudio/ide/visual-studio-github-copilot-troubleshoot: regex=none vs classification=EXCLUDED (regex_rules=none; release_note_ref=none; Page is out of scope: does not mention both the product and tool.)
 - https://learn.microsoft.com/en-us/visualstudio/ide/work-with-github-accounts: regex=none vs classification=EXCLUDED (regex_rules=none; release_note_ref=none; Page is out of scope: does not mention both the product and tool.)
+- https://learn.microsoft.com/en-us/visualstudio/install/create-a-network-installation-of-visual-studio: regex=none vs classification=EXCLUDED (regex_rules=none; release_note_ref=none; Page is out of scope: does not mention both the product and tool.)
+- https://learn.microsoft.com/en-us/visualstudio/test/github-copilot-test-dotnet-overview: regex=none vs classification=EXCLUDED (regex_rules=none; release_note_ref=none; Page is out of scope: does not mention both the product and tool.)
+- https://learn.microsoft.com/en-us/visualstudio/version-control/git-with-visual-studio: regex=none vs classification=EXCLUDED (regex_rules=none; release_note_ref=none; Page is out of scope: does not mention both the product and tool.)
 - https://learn.microsoft.com/en-us/visualstudio/windows/: regex=none vs classification=EXCLUDED (regex_rules=none; release_note_ref=none; Page is out of scope: does not mention both the product and tool.)

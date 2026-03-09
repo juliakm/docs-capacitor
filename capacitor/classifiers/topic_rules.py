@@ -199,7 +199,7 @@ def classify_page(
     confidence_cfg = strategy.get("classification", {}).get("default_confidence", {})
     topic_rules = strategy.get("topic_rules", [])
 
-    lowered_text = text or ""
+    lowered_text = (text or "").lower()
     product_sections = release_notes.get(section_key, [])
 
     regex_rule_ids = sorted([rid for rid in group.get("rule_ids", set()) if rid and rid not in {"NO_MATCH", "EXCLUDED"}])
