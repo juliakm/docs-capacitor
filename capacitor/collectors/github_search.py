@@ -33,9 +33,9 @@ from capacitor.collectors import register_collector
 logger = logging.getLogger(__name__)
 
 # ── rate-limit / retry defaults ───────────────────────────────────
-RATE_LIMIT_DELAY = 7            # seconds between search API calls
+RATE_LIMIT_DELAY = 3            # seconds between search API calls
 MAX_RETRIES = 3
-RETRY_BACKOFF = [30, 60, 120]   # seconds per retry
+RETRY_BACKOFF = [15, 30, 60]    # seconds per retry
 RESULTS_PER_QUERY = 100
 CACHE_TTL_HOURS = 24
 
@@ -104,8 +104,10 @@ def _gh_search_code(
 ) -> List[Dict[str, str]]:
     """Run ``gh search code`` with org filters and return ``[{repo, path}]``."""
     all_hits: List[Dict[str, str]] = []
-    for org in orgs:
+    total = len(orgs)
+    for idx, org in enumerate(orgs, 1):
         full_query = f"{query} org:{org}"
+        print(f"    [{idx}/{total}] gh search code '{query[:40]}' org:{org}", end="", flush=True)
         cmd = [
             "gh", "search", "code", full_query,
             "--extension", "md",
@@ -120,6 +122,7 @@ def _gh_search_code(
                 try:
                     items = json.loads(result.stdout)
                 except json.JSONDecodeError:
+                    print(" — parse error", flush=True)
                     break
                 for item in items:
                     repo_field = item.get("repository", "")
@@ -132,13 +135,15 @@ def _gh_search_code(
                         "repo": repo_name,
                         "path": item.get("path", ""),
                     })
+                print(f" — {len(items)} hits", flush=True)
                 break
             # Rate-limited or transient error — retry with backoff
             if attempt < MAX_RETRIES:
                 wait = RETRY_BACKOFF[attempt] if attempt < len(RETRY_BACKOFF) else 120
-                logger.warning("Rate limited on search, retrying in %ds…", wait)
+                print(f" — rate limited, retrying in {wait}s…", flush=True)
                 time.sleep(wait)
         else:
+            print(" — failed after retries", flush=True)
             logger.warning("Search failed after %d retries: %s", MAX_RETRIES, full_query)
         # Rate-limit pause between org queries
         time.sleep(RATE_LIMIT_DELAY)

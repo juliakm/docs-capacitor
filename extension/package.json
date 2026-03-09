@@ -227,8 +227,8 @@
         },
         "docs-capacitor.timeoutMs": {
           "type": "number",
-          "default": 300000,
-          "description": "Pipeline timeout in milliseconds (default: 5 minutes)"
+          "default": 900000,
+          "description": "Pipeline timeout in milliseconds (default: 15 minutes)"
         }
       }
     },
