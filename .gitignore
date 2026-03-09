@@ -30,7 +30,11 @@ Thumbs.db
 
 # Output
 out/
+output/
 *.jsonl
+github_search_cache.json
+release_notes_snapshot.json
+.capacitor-reviewed.json
 
 # Node (extension)
 extension/node_modules/
