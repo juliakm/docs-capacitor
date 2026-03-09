@@ -24,6 +24,8 @@ search:
       - '"Tools" "Extensions" copilot "Visual Studio"'
       - '"install copilot" "Visual Studio"'
       - '"GitHub Copilot" extension "Visual Studio"'
+      - '"GitHub Copilot" "Visual Studio" install'
+      - '"GitHub Copilot" "agent mode" "Visual Studio"'
     excluded_repos:
       - MicrosoftDocs/visualstudio-docs
       - MicrosoftDocs/visualstudio-docs-pr
@@ -33,9 +35,21 @@ search:
   learn:
     api_url: "https://learn.microsoft.com/api/search"
     queries:
-      - "install GitHub Copilot Visual Studio"
-      - "GitHub Copilot extension Visual Studio"
-      - "Manage Extensions Copilot"
+      - "GitHub Copilot Visual Studio"
+      - "GitHub Copilot install Visual Studio"
+      - "Copilot agent mode Visual Studio"
+      - "Copilot extension marketplace Visual Studio"
+      - "GitHub Copilot chat Visual Studio"
+      - "Copilot code completions Visual Studio"
+    path_scopes:
+      - "/en-us/visualstudio/"
+      - "/en-us/azure/devops/"
+      - "/en-us/dotnet/"
+      - "/en-us/azure/developer/"
+      - "/en-us/copilot/"
+      - "/en-us/training/modules/"
+      - "/en-us/windows/dev-environment/"
+      - ""
     exclude_url_patterns:
       - visual-studio-code
       - vs-code

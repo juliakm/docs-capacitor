@@ -48,6 +48,7 @@ SCENARIO_SCHEMA: Dict[str, Any] = {
                     "properties": {
                         "api_url": {"type": "string", "format": "uri"},
                         "queries": {"type": "array", "items": {"type": "string"}},
+                        "path_scopes": {"type": "array", "items": {"type": "string"}, "description": "URL path prefixes to scope searches (e.g. '/en-us/visualstudio/'). Empty string = no scope."},
                         "exclude_url_patterns": {"type": "array", "items": {"type": "string"}},
                     },
                 },

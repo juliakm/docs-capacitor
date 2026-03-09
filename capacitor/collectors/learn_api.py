@@ -21,8 +21,9 @@ def _matches_any(text: str, patterns: List[str]) -> bool:
     return any(pattern in text for pattern in patterns)
 
 
-def _search_learn(api_url: str, query: str, top: int = 25) -> List[Dict[str, Any]]:
-    params = {"search": query, "locale": "en-us", "top": top}
+def _search_learn(api_url: str, query: str, scope: str = "", top: int = 30) -> List[Dict[str, Any]]:
+    scoped_query = f"{query} {scope.strip('/')}" if scope else query
+    params = {"search": scoped_query, "locale": "en-us", "$top": top}
     resp = requests.get(api_url, params=params, timeout=30)
     resp.raise_for_status()
     return resp.json().get("results", [])
@@ -49,12 +50,14 @@ class LearnAPICollector(BaseCollector):
         *,
         api_url: str = "https://learn.microsoft.com/api/search",
         queries: list[str] | None = None,
+        path_scopes: list[str] | None = None,
         exclude_url_patterns: list[str] | None = None,
         relevance_terms: list[str] | None = None,
         max_workers: int = 5,
     ):
         self.api_url = api_url
         self.queries = queries or []
+        self.path_scopes = path_scopes or [""]  # empty string = no scope filter
         self.exclude_url_patterns = exclude_url_patterns or []
         self.relevance_terms = relevance_terms or []
         self.max_workers = max_workers
@@ -69,33 +72,43 @@ class LearnAPICollector(BaseCollector):
         all_results: dict[str, Dict[str, Any]] = {}
         filtered: dict[str, Dict[str, Any]] = {}
 
+        total = len(self.queries) * len(self.path_scopes)
+        search_count = 0
+
         for query in self.queries:
-            try:
-                results = _search_learn(self.api_url, query)
-            except requests.exceptions.HTTPError:
-                continue
-            for item in results:
-                url = item.get("url", "")
-                if not url or url in all_results:
+            for scope in self.path_scopes:
+                search_count += 1
+                scope_label = scope or "(all)"
+                print(f"  [{search_count}/{total}] {query[:40]} | scope: {scope_label}", end="")
+                try:
+                    results = _search_learn(self.api_url, query, scope=scope)
+                except requests.exceptions.HTTPError:
+                    print(f" — error")
                     continue
-                all_results[url] = item
+                new_count = 0
+                for item in results:
+                    url = item.get("url", "")
+                    if not url or url in all_results:
+                        continue
+                    all_results[url] = item
 
-                # Check exclusion patterns against URL and title
-                title = (item.get("title", "") or "").lower()
-                url_lower = url.lower()
-                combined = f"{title} {url_lower}"
-                if self.exclude_url_patterns and _matches_any(combined, self.exclude_url_patterns):
-                    continue
-
-                # Check relevance (product keywords in title/url/preview)
-                if self.relevance_terms:
-                    preview = (item.get("preview", "") or "").lower()
-                    search_text = f"{title} {url_lower} {preview}"
-                    if not any(term.lower() in search_text for term in self.relevance_terms):
+                    title = (item.get("title", "") or "").lower()
+                    url_lower = url.lower()
+                    combined = f"{title} {url_lower}"
+                    if self.exclude_url_patterns and _matches_any(combined, self.exclude_url_patterns):
                         continue
 
-                filtered[url] = item
+                    if self.relevance_terms:
+                        preview = (item.get("preview", "") or "").lower()
+                        search_text = f"{title} {url_lower} {preview}"
+                        if not any(term.lower() in search_text for term in self.relevance_terms):
+                            continue
 
+                    filtered[url] = item
+                    new_count += 1
+                print(f" — {len(results)} results, {new_count} new")
+
+        print(f"  Learn search: {len(all_results)} total results, {len(filtered)} after filtering")
         return list(filtered.values())
 
     def _fetch_pages(self, urls: List[str]) -> Iterator[Dict[str, Any]]:

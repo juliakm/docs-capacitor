@@ -65,6 +65,7 @@ class Pipeline:
         return cls(
             api_url=learn_cfg.get("api_url", "https://learn.microsoft.com/api/search"),
             queries=learn_cfg.get("queries", []),
+            path_scopes=learn_cfg.get("path_scopes", [""]),
             exclude_url_patterns=learn_cfg.get("exclude_url_patterns", []),
             relevance_terms=[product.get("name", ""), product.get("tool", "")],
         )
