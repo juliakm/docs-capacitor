@@ -9,7 +9,7 @@ export interface PageResult {
   url: string;
   title?: string;
   classification: string;
-  confidence: number;
+  confidence: number | string;
   topic?: string;
   reason?: string;
   suggested_fix?: string;
@@ -20,6 +20,18 @@ export interface PageResult {
   release_conflict_section?: string;
   agrees_with_regex?: boolean;
   repo?: string;
+}
+
+/** Format confidence for display — handles both string ("high") and numeric (0.85) values. */
+function formatConfidence(confidence: number | string | undefined): string {
+  if (confidence === undefined || confidence === null) { return ""; }
+  if (typeof confidence === "string") {
+    return confidence.charAt(0).toUpperCase() + confidence.slice(1);
+  }
+  if (typeof confidence === "number" && confidence <= 1) {
+    return `${(confidence * 100).toFixed(0)}%`;
+  }
+  return String(confidence);
 }
 
 /** Extract a human-readable title from a Learn URL path segment. */
@@ -215,7 +227,7 @@ export class ResultsProvider implements vscode.TreeDataProvider<ResultItem> {
         if (r.topic) { parts.push(r.topic); }
         item.description = parts.join(" · ");
         item.tooltip = new vscode.MarkdownString(
-          `**${displayTitle}**\n\n${r.url}\n\nClassification: ${r.classification}  \nConfidence: ${(r.confidence * 100).toFixed(0)}%` +
+          `**${displayTitle}**\n\n${r.url}\n\nClassification: ${r.classification}  \nConfidence: ${formatConfidence(r.confidence)}` +
           (r.topic ? `  \nTopic: ${r.topic}` : "") +
           (r.reason ? `  \nReason: ${r.reason}` : "") +
           (r.suggested_fix ? `  \nFix: ${r.suggested_fix}` : "") +
@@ -246,7 +258,7 @@ export class ResultsProvider implements vscode.TreeDataProvider<ResultItem> {
       items.push(item);
     };
 
-    add("Confidence", `${(r.confidence * 100).toFixed(0)}%`, "dashboard");
+    add("Confidence", formatConfidence(r.confidence), "dashboard");
     add("Reason", r.reason, "comment");
     add("Suggested Fix", r.suggested_fix, "lightbulb");
     add("Evidence", r.evidence, "search");
@@ -355,7 +367,7 @@ export class ResultsProvider implements vscode.TreeDataProvider<ResultItem> {
             url: String(item["url"] ?? ""),
             title: item["title"] != null ? String(item["title"]) : undefined,
             classification: String(item["classification"] ?? "unknown"),
-            confidence: Number(item["confidence"] ?? 0),
+            confidence: item["confidence"] != null ? (typeof item["confidence"] === "string" ? String(item["confidence"]) : Number(item["confidence"])) : 0,
             topic: item["topic"] != null ? String(item["topic"]) : undefined,
             reason: item["reason"] != null ? String(item["reason"]) : undefined,
             suggested_fix: item["suggested_fix"] != null ? String(item["suggested_fix"]) : undefined,

@@ -197,7 +197,7 @@ export function activate(context: vscode.ExtensionContext): void {
       const lines = [
         `URL: ${r.url}`,
         `Classification: ${r.classification}`,
-        `Confidence: ${(r.confidence * 100).toFixed(0)}%`,
+        `Confidence: ${typeof r.confidence === "string" ? r.confidence : (r.confidence * 100).toFixed(0) + "%"}`,
         r.topic ? `Topic: ${r.topic}` : "",
         r.reason ? `Reason: ${r.reason}` : "",
         r.suggested_fix ? `Suggested Fix: ${r.suggested_fix}` : "",
