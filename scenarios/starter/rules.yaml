@@ -1,0 +1,30 @@
+# Starter — Regex Detection Rules Template
+# Customize patterns to match outdated content for your product.
+
+filters:
+  include:
+    url_regex:
+      - 'learn\.microsoft\.com'
+  exclude:
+    url_regex:
+      - 'release-notes'
+
+rules:
+  - id: DEPRECATED_API
+    title: "References deprecated API endpoint"
+    severity: P0
+    match:
+      any_regex:
+        - '(?i)api\.example\.com/v1'       # Replace with actual deprecated patterns
+    unless:
+      any_regex:
+        - '(?i)deprecated'                  # Skip if article already mentions deprecation
+
+  - id: OLD_VERSION
+    title: "References old version number"
+    severity: INFO
+    match:
+      any_regex:
+        - '(?i)version\s+1\.\d+'           # Replace with your old version pattern
+    unless:
+      any_regex: []

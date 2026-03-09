@@ -1,0 +1,44 @@
+# Starter — Classification Strategy Template
+# Customize scope and topic rules for your product.
+
+meta:
+  name: "starter"
+  version: "1.0"
+  narrative_instructions:
+    - "Customize this strategy for your specific product and outdated patterns."
+
+scope:
+  product_patterns:
+    - 'my\s+product'
+  tool_patterns: []
+
+hard_exclusions:
+  url_regex:
+    - 'release-notes'
+  repo_regex: []
+
+classification:
+  default_confidence:
+    p0_outdated: "high"
+    needs_clarification: "medium"
+    up_to_date: "medium"
+    excluded: "high"
+
+topic_rules:
+  - id: example-topic
+    title: "Example Topic"
+    area: general
+    release_signals:
+      any_regex:
+        - '(?i)new\s+feature'              # Patterns matching release note sections
+    page_topic_signals:
+      any_regex:
+        - '(?i)old\s+feature'              # Patterns matching article content
+    stale_signals:
+      any_regex:
+        - '(?i)deprecated\s+api'           # What makes an article stale
+    stale_exceptions:
+      any_regex: []
+    current_signals:
+      any_regex:
+        - '(?i)new\s+api'                  # What makes an article current

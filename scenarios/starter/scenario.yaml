@@ -1,0 +1,55 @@
+# Starter Scenario Template
+# Copy this directory and customize for your product/team.
+# See the README for a full walkthrough.
+
+name: "My Product Freshness Check"
+description: >
+  Describe what outdated content you're looking for.
+  Example: Find articles referencing deprecated API endpoints for MyProduct.
+
+product:
+  name: "My Product"        # e.g., "Azure CLI", "GitHub Copilot"
+  tool: ""                   # e.g., "Visual Studio", "" if not tool-specific
+
+search:
+  learn:
+    queries:
+      - "my product install"
+      - "my product getting started"
+
+  github:
+    orgs:
+      - MicrosoftDocs
+    queries:
+      - '"my product" deprecated'
+    excluded_repos: []
+
+url_filters:
+  relevant: []               # Empty = all URLs accepted
+  skip: []                   # URL substrings to skip
+
+detection:
+  regex_rules: rules.yaml    # Create a rules.yaml in this directory
+  llm:
+    key_facts:
+      - "Replace with actual facts about your product's current state."
+      - "Each fact should be a clear, verifiable statement."
+    max_article_chars: 8000
+    rate_limit_rpm: 10
+
+classification:
+  strategy: strategy.yaml    # Create a strategy.yaml in this directory
+  scope:
+    product_patterns:
+      - 'my\s+product'       # Regex patterns matching your product name
+    tool_patterns: []         # Regex patterns matching tool name (optional)
+
+release_notes:
+  url: ""                    # URL to your product's release notes page
+  section_pattern: ""        # Regex to extract relevant sections
+  section_key: "product_sections"
+
+reporting:
+  title: "My Product — Freshness Report"
+  formats:
+    - markdown

@@ -1,0 +1,72 @@
+# Copilot VS Install Path — Regex Detection Rules
+# Patterns that flag potentially outdated Copilot install instructions.
+
+filters:
+  include:
+    url_regex:
+      - 'learn\.microsoft\.com'
+      - 'github\.com/MicrosoftDocs'
+      - 'github\.com/dotnet'
+  exclude:
+    url_regex:
+      - 'release-notes'
+
+rules:
+  - id: MARKETPLACE_LINK
+    title: "Links to VS Marketplace for Copilot extension"
+    severity: P0
+    match:
+      any_regex:
+        - 'marketplace\.visualstudio\.com/items\?itemName=GitHub\.copilotvs'
+        - 'marketplace\.visualstudio\.com.*copilot.*visual\s*studio'
+    unless:
+      any_regex:
+        - 'Visual Studio Code'
+        - 'VS Code'
+
+  - id: MANAGE_EXTENSIONS
+    title: "References Manage Extensions for Copilot install"
+    severity: P0
+    match:
+      all_regex:
+        - '(?i)manage\s+extensions'
+        - '(?i)copilot'
+      any_regex:
+        - '(?i)manage\s+extensions.*copilot'
+        - '(?i)copilot.*manage\s+extensions'
+    unless:
+      any_regex:
+        - '(?i)visual\s+studio\s+code'
+        - '(?i)vs\s*code'
+
+  - id: TOOLS_EXTENSIONS
+    title: "References Tools > Extensions menu for Copilot"
+    severity: P0
+    match:
+      all_regex:
+        - '(?i)tools.*extensions'
+        - '(?i)copilot'
+      any_regex:
+        - '(?i)tools\s*>\s*extensions.*copilot'
+        - '(?i)copilot.*tools\s*>\s*extensions'
+    unless:
+      any_regex:
+        - '(?i)visual\s+studio\s+code'
+
+  - id: EXTENSION_INSTALL
+    title: "Generic 'install the extension' for Copilot in VS"
+    severity: INFO
+    match:
+      all_regex:
+        - '(?i)install.*extension'
+        - '(?i)copilot'
+        - '(?i)visual\s+studio(?!\s*code)'
+      any_regex:
+        - '(?i)install\s+the\s+.*copilot\s+extension'
+        - '(?i)copilot\s+extension.*install'
+    unless:
+      any_regex:
+        - '(?i)visual\s+studio\s+code'
+        - '(?i)vs\s*code'
+        - '(?i)17\.\d+.*built.?in'
+        - '(?i)included.*17\.\d+'

@@ -1,0 +1,65 @@
+# Copilot VS Install Path — Classification Strategy
+# Defines scope, topic rules, and confidence settings for the classifier.
+
+meta:
+  name: "copilot-vs-install-path"
+  version: "1.0"
+  narrative_instructions:
+    - "Only flag articles that explicitly tell users to install Copilot via Manage Extensions or the Marketplace."
+    - "Articles that merely mention Copilot without install instructions are not outdated."
+
+scope:
+  product_patterns:
+    - 'github\s+copilot'
+    - '\bcopilot\b'
+  tool_patterns:
+    - 'visual\s+studio\b(?!\s*code)'
+
+hard_exclusions:
+  url_regex:
+    - 'release-notes'
+    - '/copilot/microsoft-365/'
+  repo_regex: []
+
+classification:
+  default_confidence:
+    p0_outdated: "high"
+    needs_clarification: "medium"
+    up_to_date: "medium"
+    excluded: "high"
+
+topic_rules:
+  - id: install-path
+    title: "Copilot Install Path"
+    area: install
+    release_signals:
+      any_regex:
+        - '(?i)copilot.*built.?in'
+        - '(?i)copilot.*included'
+        - '(?i)no\s+longer.*extension'
+    page_topic_signals:
+      any_regex:
+        - '(?i)install.*copilot'
+        - '(?i)copilot.*install'
+        - '(?i)manage\s+extensions.*copilot'
+        - '(?i)copilot.*extension'
+    stale_signals:
+      any_regex:
+        - '(?i)manage\s+extensions.*copilot'
+        - '(?i)marketplace\.visualstudio\.com.*copilot'
+        - '(?i)tools\s*>\s*extensions.*copilot'
+        - '(?i)install\s+the\s+copilot\s+extension'
+    stale_exceptions:
+      any_regex:
+        - '(?i)17\.\d+.*built.?in'
+        - '(?i)included.*17\.\d+'
+        - '(?i)no\s+longer.*need.*extension'
+    current_signals:
+      any_regex:
+        - '(?i)built.?in.*17\.\d+'
+        - '(?i)17\.\d+.*built.?in'
+        - '(?i)included.*by\s+default'
+        - '(?i)no.*extension.*required'
+    narrative_instructions:
+      - "The install-path topic checks for articles that still direct users to Manage Extensions or the VS Marketplace."
+      - "Since VS 2022 17.10, Copilot is built-in. Articles should reflect this."
