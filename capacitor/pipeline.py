@@ -15,7 +15,7 @@ from capacitor.collectors import COLLECTOR_REGISTRY
 from capacitor.detectors import DETECTOR_REGISTRY
 from capacitor.classifiers import CLASSIFIER_REGISTRY
 from capacitor.reporters import REPORTER_REGISTRY
-from capacitor.utils.release_notes import build_snapshot
+from capacitor.utils.release_notes import build_snapshot, fetch_page, extract_sections
 
 
 class Pipeline:
@@ -142,11 +142,12 @@ class Pipeline:
             return self.release_notes
 
         print(f"Fetching release notes from {url}")
+        html = fetch_page(url)
+        sections = extract_sections(html, section_pattern) if section_pattern else []
         self.release_notes = build_snapshot(
             url=url,
-            sections=None,
+            sections=sections,
             section_key=section_key,
-            section_pattern=section_pattern,
         )
         self.out_dir.mkdir(parents=True, exist_ok=True)
         snapshot_path = self.out_dir / "release_notes_snapshot.json"
