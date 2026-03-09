@@ -65,6 +65,10 @@ topic_rules:
         - '(?i)included.*17\.\d+'
         - '(?i)no\s+longer.*need.*extension'
         - '(?i)copilot\s+for\s+azure'
+        # VS Code install instructions are fine — only VS (non-Code) is the problem
+        - '(?i)visual\s+studio\s+code'
+        - '(?i)\bvs\s*code\b'
+        - '(?i)\bvscode\b'
     current_signals:
       any_regex:
         - '(?i)built.?in.*17\.\d+'
@@ -75,3 +79,4 @@ topic_rules:
       - "The install-path topic checks for articles that still direct users to Manage Extensions or the VS Marketplace."
       - "Since VS 2022 17.10, Copilot is built-in. Articles should reflect this."
       - "Exception: 'Copilot for Azure' is a SEPARATE extension that IS still installed via the marketplace."
+      - "Exception: VS Code still uses marketplace/extension install — only Visual Studio (non-Code) is affected."
