@@ -141,20 +141,158 @@ def classify(scenario: str, out: str, area: tuple[str, ...]) -> None:
 @main.command()
 @click.option("--scenario", "-s", required=True, help="Path to scenario YAML file.")
 def validate(scenario: str) -> None:
-    """Validate a scenario YAML file against the schema."""
-    config = _load_config(scenario)
+    """Validate scenario YAML, configuration, plugins, and connections."""
+    import os
+    import subprocess
+
+    errors: list[str] = []
+    warnings: list[str] = []
+
+    def _pass(msg: str) -> None:
+        click.echo(click.style("  ✓ ", fg="green") + msg)
+
+    def _fail(msg: str) -> None:
+        click.echo(click.style("  ✗ ", fg="red") + msg)
+        errors.append(msg)
+
+    def _warn(msg: str) -> None:
+        click.echo(click.style("  ✗ ", fg="yellow") + msg)
+        warnings.append(msg)
+
+    # --- 1. Scenario YAML parses correctly ---
+    click.echo("Checking scenario…")
+    scenario_path = Path(scenario)
+    try:
+        config = CapacitorConfig(scenario_path)
+        _pass(f"Scenario YAML parses correctly ({config.scenario_name})")
+    except Exception as exc:
+        _fail(f"Scenario YAML failed to parse: {exc}")
+        click.echo("")
+        click.secho(f"✗ Cannot continue — scenario failed to load.", fg="red")
+        sys.exit(1)
+
+    # --- 2. Schema validation ---
     try:
         from capacitor.scenario_schema import validate_scenario
-        errors = validate_scenario(config.raw)
-        if errors:
-            click.echo("Validation errors:", err=True)
-            for error in errors:
-                click.echo(f"  - {error}", err=True)
-            sys.exit(1)
-        click.echo(f"✓ Scenario '{config.scenario_name}' is valid.")
+        schema_errors = validate_scenario(config.raw)
+        if schema_errors:
+            for e in schema_errors:
+                _fail(f"Schema: {e}")
+        else:
+            _pass("Scenario passes JSON Schema validation")
     except ImportError:
-        click.echo("jsonschema not installed — skipping schema validation.")
-        click.echo(f"Scenario '{config.scenario_name}' loaded successfully (basic check only).")
+        _warn("jsonschema not installed — schema validation skipped")
+
+    # --- 3. Rules YAML exists and loads ---
+    click.echo("Checking referenced files…")
+    rules_rel = config.detection.get("regex_rules")
+    if rules_rel:
+        rules_path = config.scenario_dir / rules_rel
+        if rules_path.exists():
+            try:
+                import yaml
+                data = yaml.safe_load(rules_path.read_text(encoding="utf-8"))
+                rule_count = len((data or {}).get("rules", []))
+                _pass(f"Rules YAML loads — {rule_count} rule(s) ({rules_path})")
+            except Exception as exc:
+                _fail(f"Rules YAML failed to load: {exc}")
+        else:
+            _fail(f"Rules YAML not found: {rules_path}")
+    else:
+        _pass("No regex rules configured (skipped)")
+
+    # --- 4. Strategy YAML exists and loads ---
+    strategy_rel = config.classification.get("strategy")
+    if strategy_rel:
+        strategy_path = config.scenario_dir / strategy_rel
+        if strategy_path.exists():
+            try:
+                import yaml
+                data = yaml.safe_load(strategy_path.read_text(encoding="utf-8"))
+                topic_count = len((data or {}).get("topic_rules", []))
+                _pass(f"Strategy YAML loads — {topic_count} topic rule(s) ({strategy_path})")
+            except Exception as exc:
+                _fail(f"Strategy YAML failed to load: {exc}")
+        else:
+            _fail(f"Strategy YAML not found: {strategy_path}")
+    else:
+        _pass("No strategy configured (skipped)")
+
+    # --- 5. All referenced files exist (prompt template, tracker, etc.) ---
+    prompt_tpl = config.detection.get("llm", {}).get("prompt_template")
+    if prompt_tpl:
+        prompt_path = config.scenario_dir / prompt_tpl
+        if prompt_path.exists():
+            _pass(f"Prompt template exists ({prompt_path})")
+        else:
+            _fail(f"Prompt template not found: {prompt_path}")
+
+    tracker = config.search.get("github", {}).get("tracker")
+    if tracker:
+        tracker_path = config.scenario_dir / tracker
+        if tracker_path.exists():
+            _pass(f"Tracker file exists ({tracker_path})")
+        else:
+            # Tracker may be created at runtime; warn, don't fail
+            _warn(f"Tracker file not found (may be created on first run): {tracker_path}")
+
+    # --- 6. Plugin availability ---
+    click.echo("Checking plugins…")
+    from capacitor.collectors import COLLECTOR_REGISTRY
+    from capacitor.detectors import DETECTOR_REGISTRY
+    from capacitor.classifiers import CLASSIFIER_REGISTRY
+    from capacitor.reporters import REPORTER_REGISTRY
+
+    for label, registry in [
+        ("Collectors", COLLECTOR_REGISTRY),
+        ("Detectors", DETECTOR_REGISTRY),
+        ("Classifiers", CLASSIFIER_REGISTRY),
+        ("Reporters", REPORTER_REGISTRY),
+    ]:
+        if registry:
+            _pass(f"{label}: {', '.join(sorted(registry.keys()))}")
+        else:
+            _fail(f"{label}: none registered")
+
+    # --- 7. GitHub CLI available ---
+    click.echo("Checking external tools…")
+    try:
+        result = subprocess.run(
+            ["gh", "--version"], capture_output=True, text=True, timeout=5,
+        )
+        if result.returncode == 0:
+            version_line = result.stdout.strip().splitlines()[0]
+            _pass(f"GitHub CLI available ({version_line})")
+        else:
+            _warn("GitHub CLI (`gh`) returned non-zero exit code")
+    except FileNotFoundError:
+        _warn("GitHub CLI (`gh`) not found — GitHub collection will fail")
+    except Exception as exc:
+        _warn(f"GitHub CLI check failed: {exc}")
+
+    # --- 8. LLM provider env vars (GitHub Models or Azure OpenAI) ---
+    llm_configured = bool(config.detection.get("llm"))
+    gh_token = os.environ.get("GITHUB_TOKEN", "")
+    az_endpoint = os.environ.get("AZURE_OPENAI_ENDPOINT", "")
+    az_key = os.environ.get("AZURE_OPENAI_API_KEY", "")
+    if gh_token:
+        _pass("GitHub Models token set (GITHUB_TOKEN)")
+    elif az_endpoint and az_key:
+        _pass("Azure OpenAI env vars set (AZURE_OPENAI_ENDPOINT, AZURE_OPENAI_API_KEY)")
+    elif llm_configured:
+        _warn("No LLM credentials found — set GITHUB_TOKEN (preferred) or AZURE_OPENAI_ENDPOINT + AZURE_OPENAI_API_KEY")
+    else:
+        _pass("LLM not needed (no LLM detection configured)")
+
+    # --- Summary ---
+    click.echo("")
+    if errors:
+        click.secho(f"✗ {len(errors)} error(s), {len(warnings)} warning(s)", fg="red")
+        sys.exit(1)
+    elif warnings:
+        click.secho(f"✓ Valid with {len(warnings)} warning(s)", fg="yellow")
+    else:
+        click.secho("✓ All checks passed — ready to run.", fg="green")
 
 
 @main.command("refresh-notes")

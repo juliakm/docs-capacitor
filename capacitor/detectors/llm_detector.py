@@ -188,10 +188,17 @@ class LLMDetector(BaseDetector):
     def __init__(
         self,
         *,
+        # Provider selection: "github_models" (preferred) or "azure_openai"
+        provider: str = "",
+        # GitHub Models config
+        github_token: str = "",
+        model: str = "gpt-4o",
+        # Azure OpenAI config (fallback)
         endpoint: str = "",
         api_key: str = "",
         deployment: str = "gpt-4o",
         api_version: str = "2024-12-01-preview",
+        # Common config
         release_notes_path: str | Path | None = None,
         cache_dir: str | Path | None = None,
         use_cache: bool = True,
@@ -205,6 +212,18 @@ class LLMDetector(BaseDetector):
         max_article_chars: int = 8000,
         rate_limit_rpm: int = 10,
     ):
+        # Auto-detect provider if not explicitly set
+        if provider:
+            self.provider = provider
+        elif github_token:
+            self.provider = "github_models"
+        elif endpoint and api_key:
+            self.provider = "azure_openai"
+        else:
+            self.provider = "github_models"  # preferred default
+
+        self.github_token = github_token
+        self.model = model
         self.endpoint = endpoint
         self.api_key = api_key
         self.deployment = deployment
@@ -224,10 +243,34 @@ class LLMDetector(BaseDetector):
 
     def _is_configured(self) -> bool:
         try:
-            from openai import AzureOpenAI  # noqa: F401
+            from openai import OpenAI  # noqa: F401
         except ImportError:
             return False
+        if self.provider == "github_models":
+            return bool(self.github_token)
         return bool(self.endpoint and self.api_key)
+
+    def _create_client(self) -> Any:
+        """Create the appropriate OpenAI client based on provider."""
+        if self.provider == "github_models":
+            from openai import OpenAI
+            return OpenAI(
+                base_url="https://models.inference.ai.azure.com",
+                api_key=self.github_token,
+            )
+        else:
+            from openai import AzureOpenAI
+            return AzureOpenAI(
+                azure_endpoint=self.endpoint,
+                api_key=self.api_key,
+                api_version=self.api_version,
+            )
+
+    def _get_model_name(self) -> str:
+        """Return the model/deployment name for the current provider."""
+        if self.provider == "github_models":
+            return self.model
+        return self.deployment
 
     def detect(self, pages: List[Dict[str, Any]], *, emit_all: bool = False, **kwargs: Any) -> List[Dict[str, Any]]:
         if not self._is_configured():
@@ -302,13 +345,9 @@ class LLMDetector(BaseDetector):
             if cached is not None:
                 return cached
 
-        from openai import AzureOpenAI
+        from openai import OpenAI  # noqa: F401
 
-        client = AzureOpenAI(
-            azure_endpoint=self.endpoint,
-            api_key=self.api_key,
-            api_version=self.api_version,
-        )
+        client = self._create_client()
         prompt = build_prompt(
             url, text, key_facts,
             template_path=self.prompt_template_path,
@@ -317,7 +356,7 @@ class LLMDetector(BaseDetector):
             max_article_chars=self.max_article_chars,
         )
         response = client.chat.completions.create(
-            model=self.deployment,
+            model=self._get_model_name(),
             messages=[
                 {"role": "system", "content": "You are a documentation freshness reviewer. Only flag explicit contradictions. Respond only with valid JSON."},
                 {"role": "user", "content": prompt},

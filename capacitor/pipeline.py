@@ -9,6 +9,7 @@ import json
 import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+from urllib.parse import urldefrag
 
 from capacitor.config import CapacitorConfig
 from capacitor.collectors import COLLECTOR_REGISTRY
@@ -29,6 +30,7 @@ class Pipeline:
         self.classifications: List[Dict[str, Any]] = []
         self.release_notes: Dict[str, Any] = {}
         self.strategy: Dict[str, Any] = {}
+        self._seen_urls: set[str] = set()
 
     # ------------------------------------------------------------------
     # Builder helpers
@@ -39,11 +41,18 @@ class Pipeline:
         if not cls:
             return None
         search = self.config.search
-        tracker = search.get("github", {}).get("tracker", "")
+        gh_cfg = search.get("github", {})
+        tracker = gh_cfg.get("tracker", "")
         tracker_path = (self.config.scenario_dir / tracker) if tracker else None
         return cls(
             tracker_path=tracker_path,
-            excluded_repos=search.get("github", {}).get("excluded_repos", []),
+            excluded_repos=gh_cfg.get("excluded_repos", []),
+            orgs=gh_cfg.get("orgs", []),
+            queries=gh_cfg.get("queries", []),
+            cache_dir=self.out_dir,
+            use_cache=gh_cfg.get("use_cache", True),
+            repos_file=gh_cfg.get("repos_file"),
+            dry_run=gh_cfg.get("dry_run", False),
         )
 
     def _build_learn_collector(self) -> Any:
@@ -89,6 +98,9 @@ class Pipeline:
         rn_path = self.out_dir / "release_notes_snapshot.json"
 
         return cls(
+            provider=os.getenv("LLM_PROVIDER", ""),
+            github_token=os.getenv("GITHUB_TOKEN", ""),
+            model=os.getenv("GITHUB_MODELS_MODEL", "gpt-4o"),
             endpoint=os.getenv("AZURE_OPENAI_ENDPOINT", ""),
             api_key=os.getenv("AZURE_OPENAI_API_KEY", ""),
             deployment=os.getenv("AZURE_OPENAI_DEPLOYMENT", "gpt-4o"),
@@ -155,10 +167,18 @@ class Pipeline:
         print(f"Saved release notes snapshot ({len(self.release_notes.get(section_key, []))} sections)")
         return self.release_notes
 
+    @staticmethod
+    def _normalize_url(url: str) -> str:
+        """Normalize a URL for deduplication: strip fragment and trailing slashes."""
+        defragged, _ = urldefrag(url)
+        return defragged.rstrip("/")
+
     def collect(self, *, sources: List[str] | None = None, pages_jsonl: str | None = None) -> List[Dict[str, Any]]:
-        """Run collector stage."""
+        """Run collector stage with cross-source deduplication."""
         sources = sources or ["github", "learn"]
         self.pages = []
+        self._seen_urls = set()
+        dedup_count = 0
         for source in sources:
             print(f"Collecting from: {source}")
             if source == "github":
@@ -174,8 +194,20 @@ class Pipeline:
                 print(f"  {source} collector not available, skipping")
                 continue
             pages = list(collector.collect(pages_jsonl=pages_jsonl) if source == "github" else collector.collect())
-            print(f"  Collected {len(pages)} pages from {source}")
-            self.pages.extend(pages)
+            added = 0
+            for page in pages:
+                raw_url = page.get("url") or page.get("file") or ""
+                norm = self._normalize_url(raw_url)
+                if norm and norm in self._seen_urls:
+                    dedup_count += 1
+                    continue
+                if norm:
+                    self._seen_urls.add(norm)
+                self.pages.append(page)
+                added += 1
+            print(f"  Collected {len(pages)} pages from {source} ({added} new)")
+        if dedup_count:
+            print(f"  Deduplicated {dedup_count} duplicate page(s)")
         print(f"Total pages collected: {len(self.pages)}")
         return self.pages
 
