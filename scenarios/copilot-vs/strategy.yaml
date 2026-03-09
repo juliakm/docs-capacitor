@@ -3,15 +3,17 @@
 
 meta:
   name: "copilot-vs-install-path"
-  version: "1.0"
+  version: "1.1"
   narrative_instructions:
     - "Only flag articles that explicitly tell users to install Copilot via Manage Extensions or the Marketplace."
     - "Articles that merely mention Copilot without install instructions are not outdated."
+    - "Articles about 'Copilot for Azure' or Azure-specific Copilot extensions are NOT in scope."
 
 scope:
+  # Require "GitHub Copilot" (not just "copilot" alone) to avoid false positives
+  # from Microsoft 365 Copilot, Copilot for Azure, Copilot Studio, etc.
   product_patterns:
     - 'github\s+copilot'
-    - '\bcopilot\b'
   tool_patterns:
     - 'visual\s+studio\b(?!\s*code)'
 
@@ -19,6 +21,12 @@ hard_exclusions:
   url_regex:
     - 'release-notes'
     - '/copilot/microsoft-365/'
+    - '/microsoft-copilot-studio/'
+    - 'copilot-for-azure'
+    - '/azure/copilot/'
+    - '/mcp-server/'
+    - '\bmcp\b'
+    - 'security-copilot'
   repo_regex: []
 
 classification:
@@ -38,22 +46,25 @@ topic_rules:
         - '(?i)copilot.*included'
         - '(?i)no\s+longer.*extension'
     page_topic_signals:
+      # Must specifically discuss installing Copilot — not just mention "extension"
       any_regex:
-        - '(?i)install.*copilot'
-        - '(?i)copilot.*install'
+        - '(?i)install.*github\s+copilot'
+        - '(?i)github\s+copilot.*install'
         - '(?i)manage\s+extensions.*copilot'
-        - '(?i)copilot.*extension'
+        - '(?i)copilot.*manage\s+extensions'
+        - '(?i)marketplace\.visualstudio\.com.*copilot'
     stale_signals:
       any_regex:
         - '(?i)manage\s+extensions.*copilot'
         - '(?i)marketplace\.visualstudio\.com.*copilot'
         - '(?i)tools\s*>\s*extensions.*copilot'
-        - '(?i)install\s+the\s+copilot\s+extension'
+        - '(?i)install\s+the\s+(github\s+)?copilot\s+extension'
     stale_exceptions:
       any_regex:
         - '(?i)17\.\d+.*built.?in'
         - '(?i)included.*17\.\d+'
         - '(?i)no\s+longer.*need.*extension'
+        - '(?i)copilot\s+for\s+azure'
     current_signals:
       any_regex:
         - '(?i)built.?in.*17\.\d+'
@@ -63,3 +74,4 @@ topic_rules:
     narrative_instructions:
       - "The install-path topic checks for articles that still direct users to Manage Extensions or the VS Marketplace."
       - "Since VS 2022 17.10, Copilot is built-in. Articles should reflect this."
+      - "Exception: 'Copilot for Azure' is a SEPARATE extension that IS still installed via the marketplace."
