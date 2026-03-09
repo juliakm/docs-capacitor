@@ -26,6 +26,8 @@ search:
       - '"GitHub Copilot" extension "Visual Studio"'
     excluded_repos:
       - MicrosoftDocs/visualstudio-docs
+      - MicrosoftDocs/visualstudio-docs-pr
+      - MicrosoftDocs/visualstudio-docs-archive-pr
     tracker: tracker.json
 
   learn:
@@ -42,16 +44,31 @@ search:
 url_filters:
   relevant:
     - /training/modules/
+    - /training/paths/
     - /dotnet/
     - /visualstudio/
     - /azure/developer/
+    - /azure/devops/
     - /nuget/
     - /aspnet/
+    - /ssms/
+    - /credentials/
   skip:
     - /copilot/microsoft-365/
+    - /microsoft-365-copilot/
+    - /microsoft-copilot-studio/
+    - /copilot/security/
     - /copilot/overview
     - /copilot/manage-copilot
     - /copilot/faq
+    - /copilot/privacy
+    - /intune/
+    - /power-apps/
+    - /power-bi/
+    - /fabric/
+    - /shows/
+    - /azure/copilot/
+    - /office365/
     - /release-notes/
 
 detection:
@@ -64,6 +81,8 @@ detection:
       - "For VS 2022 versions before 17.10, users DO still need to install the extension via Manage Extensions."
       - "The Visual Studio Marketplace page for Copilot should not be cited as the install source for 17.10+."
       - "Copilot features appear in the Edit menu or via Ctrl+/ in Visual Studio 2022 17.10+."
+      - "Copilot Free plan is available — no paid subscription required to start."
+      - "Visual Studio Installer is the correct install path for Copilot components."
     max_article_chars: 8000
     rate_limit_rpm: 10
 

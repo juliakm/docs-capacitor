@@ -1,0 +1,271 @@
+{
+  "name": "docs-capacitor",
+  "displayName": "Docs Capacitor — Documentation Freshness",
+  "description": "Detect outdated references in Microsoft Learn documentation",
+  "version": "0.1.0",
+  "publisher": "microsoft",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other",
+    "Linters"
+  ],
+  "activationEvents": [],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "docs-capacitor.check",
+        "title": "Run Freshness Check",
+        "category": "Docs Capacitor"
+      },
+      {
+        "command": "docs-capacitor.validate",
+        "title": "Validate Scenario",
+        "category": "Docs Capacitor"
+      },
+      {
+        "command": "docs-capacitor.openScenario",
+        "title": "Open Scenario File",
+        "category": "Docs Capacitor"
+      },
+      {
+        "command": "docs-capacitor.createScenario",
+        "title": "Create New Scenario",
+        "category": "Docs Capacitor"
+      },
+      {
+        "command": "docs-capacitor.scenario.refresh",
+        "title": "Refresh Scenarios",
+        "category": "Docs Capacitor",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "docs-capacitor.scenario.runCheck",
+        "title": "Run Check",
+        "category": "Docs Capacitor"
+      },
+      {
+        "command": "docs-capacitor.scenario.validate",
+        "title": "Validate",
+        "category": "Docs Capacitor"
+      },
+      {
+        "command": "docs-capacitor.scenario.edit",
+        "title": "Edit Scenario",
+        "category": "Docs Capacitor"
+      },
+      {
+        "command": "docs-capacitor.scenario.duplicate",
+        "title": "Duplicate",
+        "category": "Docs Capacitor"
+      },
+      {
+        "command": "docs-capacitor.scenario.export",
+        "title": "Export",
+        "category": "Docs Capacitor"
+      },
+      {
+        "command": "docs-capacitor.scenario.delete",
+        "title": "Delete",
+        "category": "Docs Capacitor"
+      },
+      {
+        "command": "docs-capacitor.scenario.addSearchQuery",
+        "title": "Add Search Query",
+        "category": "Docs Capacitor"
+      },
+      {
+        "command": "docs-capacitor.scenario.addKeyFact",
+        "title": "Add Key Fact",
+        "category": "Docs Capacitor"
+      },
+      {
+        "command": "docs-capacitor.openResultUrl",
+        "title": "Open URL",
+        "category": "Docs Capacitor",
+        "icon": "$(link-external)"
+      },
+      {
+        "command": "docs-capacitor.copyResultUrl",
+        "title": "Copy URL",
+        "category": "Docs Capacitor",
+        "icon": "$(copy)"
+      },
+      {
+        "command": "docs-capacitor.viewResultDetails",
+        "title": "View Details",
+        "category": "Docs Capacitor",
+        "icon": "$(info)"
+      },
+      {
+        "command": "docs-capacitor.markReviewed",
+        "title": "Mark as Reviewed",
+        "category": "Docs Capacitor",
+        "icon": "$(check)"
+      },
+      {
+        "command": "docs-capacitor.filterResults",
+        "title": "Filter Results",
+        "category": "Docs Capacitor",
+        "icon": "$(filter)"
+      },
+      {
+        "command": "docs-capacitor.refreshResults",
+        "title": "Refresh Results",
+        "category": "Docs Capacitor",
+        "icon": "$(refresh)"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "docs-capacitor.refreshResults",
+          "when": "view == docsCapacitorResults",
+          "group": "navigation"
+        },
+        {
+          "command": "docs-capacitor.filterResults",
+          "when": "view == docsCapacitorResults",
+          "group": "navigation"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "docs-capacitor.openResultUrl",
+          "when": "view == docsCapacitorResults && viewItem =~ /^page/",
+          "group": "inline"
+        },
+        {
+          "command": "docs-capacitor.openResultUrl",
+          "when": "view == docsCapacitorResults && viewItem =~ /^page/",
+          "group": "1_open"
+        },
+        {
+          "command": "docs-capacitor.copyResultUrl",
+          "when": "view == docsCapacitorResults && viewItem =~ /^page/",
+          "group": "1_open"
+        },
+        {
+          "command": "docs-capacitor.viewResultDetails",
+          "when": "view == docsCapacitorResults && viewItem =~ /^page/",
+          "group": "2_details"
+        },
+        {
+          "command": "docs-capacitor.markReviewed",
+          "when": "view == docsCapacitorResults && viewItem == page",
+          "group": "3_review"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Docs Capacitor",
+      "properties": {
+        "docs-capacitor.pythonPath": {
+          "type": "string",
+          "default": "python3",
+          "description": "Path to the Python interpreter"
+        },
+        "docs-capacitor.defaultScenario": {
+          "type": "string",
+          "default": "",
+          "description": "Default scenario YAML file path"
+        },
+        "docs-capacitor.timeoutMs": {
+          "type": "number",
+          "default": 300000,
+          "description": "Pipeline timeout in milliseconds (default: 5 minutes)"
+        }
+      }
+    },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "docs-capacitor",
+          "title": "Docs Capacitor",
+          "icon": "$(file-text)"
+        }
+      ]
+    },
+    "views": {
+      "docs-capacitor": [
+        {
+          "id": "docsCapacitorScenarios",
+          "name": "Scenarios"
+        },
+        {
+          "id": "docsCapacitorResults",
+          "name": "Freshness Results"
+        }
+      ]
+    },
+    "menus": {
+      "view/item/context": [
+        {
+          "command": "docs-capacitor.scenario.runCheck",
+          "when": "view == docsCapacitorScenarios && viewItem == scenario",
+          "group": "1_run@1"
+        },
+        {
+          "command": "docs-capacitor.scenario.validate",
+          "when": "view == docsCapacitorScenarios && viewItem == scenario",
+          "group": "1_run@2"
+        },
+        {
+          "command": "docs-capacitor.scenario.edit",
+          "when": "view == docsCapacitorScenarios && viewItem == scenario",
+          "group": "2_edit@1"
+        },
+        {
+          "command": "docs-capacitor.scenario.addSearchQuery",
+          "when": "view == docsCapacitorScenarios && viewItem == scenario",
+          "group": "2_edit@2"
+        },
+        {
+          "command": "docs-capacitor.scenario.addKeyFact",
+          "when": "view == docsCapacitorScenarios && viewItem == scenario",
+          "group": "2_edit@3"
+        },
+        {
+          "command": "docs-capacitor.scenario.duplicate",
+          "when": "view == docsCapacitorScenarios && viewItem == scenario",
+          "group": "3_manage@1"
+        },
+        {
+          "command": "docs-capacitor.scenario.export",
+          "when": "view == docsCapacitorScenarios && viewItem == scenario",
+          "group": "3_manage@2"
+        },
+        {
+          "command": "docs-capacitor.scenario.delete",
+          "when": "view == docsCapacitorScenarios && viewItem == scenario",
+          "group": "3_manage@3"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "docs-capacitor.scenario.refresh",
+          "when": "view == docsCapacitorScenarios",
+          "group": "navigation"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "package": "npm run compile && npx @vscode/vsce package --no-dependencies",
+    "lint": "tsc --noEmit",
+    "test": "npx @vscode/test-cli --run"
+  },
+  "devDependencies": {
+    "@types/js-yaml": "^4.0.9",
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.85.0",
+    "@vscode/test-cli": "^0.0.10",
+    "esbuild": "^0.20.0",
+    "typescript": "^5.3.0"
+  }
+}

@@ -1,0 +1,74 @@
+name: Freshness Check
+
+on:
+  workflow_dispatch:
+    inputs:
+      scenario:
+        description: "Path to scenario YAML"
+        required: true
+        type: string
+
+  schedule:
+    - cron: "0 8 * * 1"  # Weekly, Monday 8am UTC
+
+  push:
+    branches: [main]
+
+jobs:
+  test:
+    name: Run tests
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -e ".[dev]"
+
+      - name: Run tests
+        run: python3 -m pytest tests/ -v
+
+  check:
+    name: "Check: ${{ matrix.scenario }}"
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        scenario: ${{ github.event_name == 'workflow_dispatch' && fromJSON(format('["{0}"]', inputs.scenario)) || fromJSON('["scenarios/copilot-vs/scenario.yaml", "scenarios/starter/scenario.yaml"]') }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -e ".[all]"
+
+      - name: Derive scenario name
+        id: meta
+        run: |
+          scenario="${{ matrix.scenario }}"
+          name=$(echo "$scenario" | sed 's|scenarios/||;s|/scenario\.yaml||;s|/|-|g')
+          echo "scenario_name=$name" >> "$GITHUB_OUTPUT"
+
+      - name: Validate scenario
+        run: python3 -m capacitor validate -s ${{ matrix.scenario }}
+
+      - name: Run freshness check
+        run: |
+          mkdir -p output
+          python3 -m capacitor check -s ${{ matrix.scenario }} -o output/${{ steps.meta.outputs.scenario_name }}
+
+      - name: Upload results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: freshness-${{ steps.meta.outputs.scenario_name }}
+          path: output/${{ steps.meta.outputs.scenario_name }}
+          retention-days: 30
