@@ -1,6 +1,6 @@
 {
   "name": "docs-capacitor",
-  "displayName": "Docs Capacitor — Documentation Freshness",
+  "displayName": "Docs Capacitor \u2014 Documentation Freshness",
   "description": "Detect outdated references in Microsoft Learn documentation",
   "version": "0.1.0",
   "publisher": "microsoft",
@@ -12,7 +12,10 @@
     "Other",
     "Linters"
   ],
-  "activationEvents": [],
+  "activationEvents": [
+    "onView:docsCapacitorScenarios",
+    "onView:docsCapacitorResults"
+  ],
   "main": "./out/extension.js",
   "contributes": {
     "commands": [
@@ -120,88 +123,6 @@
       }
     ],
     "menus": {
-      "view/title": [
-        {
-          "command": "docs-capacitor.refreshResults",
-          "when": "view == docsCapacitorResults",
-          "group": "navigation"
-        },
-        {
-          "command": "docs-capacitor.filterResults",
-          "when": "view == docsCapacitorResults",
-          "group": "navigation"
-        }
-      ],
-      "view/item/context": [
-        {
-          "command": "docs-capacitor.openResultUrl",
-          "when": "view == docsCapacitorResults && viewItem =~ /^page/",
-          "group": "inline"
-        },
-        {
-          "command": "docs-capacitor.openResultUrl",
-          "when": "view == docsCapacitorResults && viewItem =~ /^page/",
-          "group": "1_open"
-        },
-        {
-          "command": "docs-capacitor.copyResultUrl",
-          "when": "view == docsCapacitorResults && viewItem =~ /^page/",
-          "group": "1_open"
-        },
-        {
-          "command": "docs-capacitor.viewResultDetails",
-          "when": "view == docsCapacitorResults && viewItem =~ /^page/",
-          "group": "2_details"
-        },
-        {
-          "command": "docs-capacitor.markReviewed",
-          "when": "view == docsCapacitorResults && viewItem == page",
-          "group": "3_review"
-        }
-      ]
-    },
-    "configuration": {
-      "title": "Docs Capacitor",
-      "properties": {
-        "docs-capacitor.pythonPath": {
-          "type": "string",
-          "default": "python3",
-          "description": "Path to the Python interpreter"
-        },
-        "docs-capacitor.defaultScenario": {
-          "type": "string",
-          "default": "",
-          "description": "Default scenario YAML file path"
-        },
-        "docs-capacitor.timeoutMs": {
-          "type": "number",
-          "default": 300000,
-          "description": "Pipeline timeout in milliseconds (default: 5 minutes)"
-        }
-      }
-    },
-    "viewsContainers": {
-      "activitybar": [
-        {
-          "id": "docs-capacitor",
-          "title": "Docs Capacitor",
-          "icon": "$(file-text)"
-        }
-      ]
-    },
-    "views": {
-      "docs-capacitor": [
-        {
-          "id": "docsCapacitorScenarios",
-          "name": "Scenarios"
-        },
-        {
-          "id": "docsCapacitorResults",
-          "name": "Freshness Results"
-        }
-      ]
-    },
-    "menus": {
       "view/item/context": [
         {
           "command": "docs-capacitor.scenario.runCheck",
@@ -249,6 +170,47 @@
           "command": "docs-capacitor.scenario.refresh",
           "when": "view == docsCapacitorScenarios",
           "group": "navigation"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Docs Capacitor",
+      "properties": {
+        "docs-capacitor.pythonPath": {
+          "type": "string",
+          "default": "python3",
+          "description": "Path to the Python interpreter"
+        },
+        "docs-capacitor.defaultScenario": {
+          "type": "string",
+          "default": "",
+          "description": "Default scenario YAML file path"
+        },
+        "docs-capacitor.timeoutMs": {
+          "type": "number",
+          "default": 300000,
+          "description": "Pipeline timeout in milliseconds (default: 5 minutes)"
+        }
+      }
+    },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "docs-capacitor",
+          "title": "Docs Capacitor",
+          "icon": "$(file-text)"
+        }
+      ]
+    },
+    "views": {
+      "docs-capacitor": [
+        {
+          "id": "docsCapacitorScenarios",
+          "name": "Scenarios"
+        },
+        {
+          "id": "docsCapacitorResults",
+          "name": "Freshness Results"
         }
       ]
     }
