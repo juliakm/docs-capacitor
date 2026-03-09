@@ -196,14 +196,19 @@
           "group": "navigation@1"
         },
         {
-          "command": "docs-capacitor.filterResults",
+          "command": "docs-capacitor.createScenario",
           "when": "view == docsCapacitorResults",
           "group": "navigation@2"
         },
         {
-          "command": "docs-capacitor.refreshResults",
+          "command": "docs-capacitor.filterResults",
           "when": "view == docsCapacitorResults",
           "group": "navigation@3"
+        },
+        {
+          "command": "docs-capacitor.refreshResults",
+          "when": "view == docsCapacitorResults",
+          "group": "navigation@4"
         }
       ]
     },

@@ -256,19 +256,28 @@ export function activate(context: vscode.ExtensionContext): void {
         return;
       }
 
+      // Animate status bar while running
+      statusBarItem.text = "$(sync~spin) Capacitor: Running…";
+      statusBarItem.tooltip = "Freshness check in progress — click to cancel";
+      statusBarItem.backgroundColor = new vscode.ThemeColor("statusBarItem.warningBackground");
+
       const cwd = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? process.cwd();
       const outputDir = path.join(cwd, "output");
       const runner = createRunner();
       const result = await runner.runCheck(scenarioPath, outputDir, { timeoutMs: getTimeoutMs() });
 
+      // Restore status bar
+      statusBarItem.backgroundColor = undefined;
       if (result.success) {
-        vscode.window.showInformationMessage("Freshness check complete.");
-        resultsProvider.refresh();
         const now = new Date().toLocaleTimeString();
         statusBarItem.text = `$(beaker) Capacitor ✓ ${now}`;
         statusBarItem.tooltip = `Last check: ${now}`;
+        vscode.window.showInformationMessage("✅ Freshness check complete — see Results panel.");
+        resultsProvider.refresh();
       } else {
-        vscode.window.showErrorMessage(`Freshness check failed (exit ${result.exitCode}).`);
+        statusBarItem.text = "$(beaker) Capacitor ✗ Failed";
+        statusBarItem.tooltip = "Last check failed — click to retry";
+        vscode.window.showErrorMessage(`Freshness check failed (exit ${result.exitCode}). See Output panel for details.`);
       }
     }),
   );

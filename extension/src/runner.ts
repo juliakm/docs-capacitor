@@ -17,10 +17,18 @@ export interface RunResult {
 
 // Patterns used to update the progress message while the pipeline runs.
 const PROGRESS_PATTERNS: Array<{ re: RegExp; message: (m: RegExpMatchArray) => string }> = [
-  { re: /Collecting from:\s*(.+)/i, message: (m) => `Collecting from: ${m[1]}` },
+  { re: /Fetching release notes/i, message: () => "Fetching release notes…" },
+  { re: /Collecting from:\s*(.+)/i, message: (m) => `Collecting from ${m[1]}…` },
+  { re: /Learn search:\s*(\d+) total/i, message: (m) => `Learn search: ${m[1]} results found` },
+  { re: /\[(\d+)\/(\d+)\]/i, message: (m) => `Searching… (${m[1]}/${m[2]})` },
+  { re: /Collected (\d+) pages from (\w+)/i, message: (m) => `${m[2]}: ${m[1]} pages collected` },
+  { re: /Total pages collected:\s*(\d+)/i, message: (m) => `${m[1]} pages collected — detecting…` },
   { re: /Running detector:\s*(.+)/i, message: (m) => `Running detector: ${m[1]}` },
-  { re: /Running strategy:\s*(.+)/i, message: (m) => `Running strategy: ${m[1]}` },
-  { re: /Applying rule:\s*(.+)/i, message: (m) => `Applying rule: ${m[1]}` },
+  { re: /found (\d+) findings/i, message: (m) => `Found ${m[1]} findings` },
+  { re: /LLM conflict check:\s*(.+)/i, message: (m) => `LLM analysis: ${m[1]}` },
+  { re: /Classifying findings/i, message: () => "Classifying findings…" },
+  { re: /Total findings:\s*(\d+)/i, message: (m) => `${m[1]} total findings — classifying…` },
+  { re: /Report written:\s*(.+)/i, message: (m) => `Report saved: ${m[1]}` },
   { re: /Writing results/i, message: () => "Writing results…" },
 ];
 
