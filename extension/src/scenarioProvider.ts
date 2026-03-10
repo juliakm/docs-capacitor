@@ -123,6 +123,39 @@ export class ScenarioProvider implements vscode.TreeDataProvider<ScenarioTreeIte
       // 2. Shallow walk for **/scenario.yaml (max depth 3 to stay fast)
       this.walkForScenarios(wsRoot, 0, 3, seen);
     }
+
+    // 3. Search additional configured paths
+    const extraPaths = vscode.workspace.getConfiguration("docs-capacitor")
+      .get<string[]>("scenarioPaths", []);
+    const wsRoot = roots[0]?.uri.fsPath;
+    for (const extra of extraPaths) {
+      const resolved = path.isAbsolute(extra) ? extra : wsRoot ? path.join(wsRoot, extra) : extra;
+      if (!fs.existsSync(resolved)) { continue; }
+      try {
+        const stat = fs.statSync(resolved);
+        if (stat.isFile() && resolved.endsWith("scenario.yaml") && !seen.has(resolved)) {
+          // Direct path to a scenario file
+          seen.add(resolved);
+          this.addScenario(resolved);
+        } else if (stat.isDirectory()) {
+          // Directory — look for scenario.yaml inside it and its immediate children
+          const direct = path.join(resolved, "scenario.yaml");
+          if (fs.existsSync(direct) && !seen.has(direct)) {
+            seen.add(direct);
+            this.addScenario(direct);
+          }
+          for (const entry of fs.readdirSync(resolved, { withFileTypes: true })) {
+            if (entry.isDirectory()) {
+              const nested = path.join(resolved, entry.name, "scenario.yaml");
+              if (fs.existsSync(nested) && !seen.has(nested)) {
+                seen.add(nested);
+                this.addScenario(nested);
+              }
+            }
+          }
+        }
+      } catch { /* skip inaccessible paths */ }
+    }
   }
 
   private walkForScenarios(dir: string, depth: number, maxDepth: number, seen: Set<string>): void {

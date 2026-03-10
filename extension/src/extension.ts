@@ -27,15 +27,31 @@ function getTimeoutMs(): number {
   return vscode.workspace.getConfiguration("docs-capacitor").get<number>("timeoutMs", 300_000);
 }
 
-/** Discover scenario.yaml files in the workspace (mirrors ScenarioProvider logic). */
+/** Discover scenario.yaml files in the workspace and configured paths. */
 function discoverScenarioFiles(): Array<{ label: string; description: string; path: string }> {
   const results: Array<{ label: string; description: string; path: string }> = [];
   const roots = vscode.workspace.workspaceFolders ?? [];
+  const seen = new Set<string>();
 
   for (const folder of roots) {
     const wsRoot = folder.uri.fsPath;
-    walkForYaml(wsRoot, 0, 3, results, wsRoot);
+    walkForYaml(wsRoot, 0, 3, results, wsRoot, seen);
   }
+
+  // Also search configured extra paths
+  const extraPaths = vscode.workspace.getConfiguration("docs-capacitor")
+    .get<string[]>("scenarioPaths", []);
+  const wsRoot = roots[0]?.uri.fsPath ?? "";
+  const fs = require("fs") as typeof import("fs");
+  const yaml = require("js-yaml");
+  for (const extra of extraPaths) {
+    const resolved = path.isAbsolute(extra) ? extra : wsRoot ? path.join(wsRoot, extra) : extra;
+    if (!fs.existsSync(resolved)) { continue; }
+    try {
+      walkForYaml(resolved, 0, 1, results, wsRoot || resolved, seen);
+    } catch { /* skip */ }
+  }
+
   return results;
 }
 
@@ -45,6 +61,7 @@ function walkForYaml(
   maxDepth: number,
   results: Array<{ label: string; description: string; path: string }>,
   wsRoot: string,
+  seen: Set<string>,
 ): void {
   if (depth > maxDepth) { return; }
   let entries: import("fs").Dirent[];
@@ -57,7 +74,8 @@ function walkForYaml(
   for (const entry of entries) {
     if (["node_modules", ".git", "out", "__pycache__"].includes(entry.name)) { continue; }
     const full = path.join(dir, entry.name);
-    if (entry.isFile() && entry.name === "scenario.yaml") {
+    if (entry.isFile() && entry.name === "scenario.yaml" && !seen.has(full)) {
+      seen.add(full);
       try {
         const raw = fs.readFileSync(full, "utf-8");
         const doc = yaml.load(raw) as { name?: string; product?: { name?: string } } | undefined;
@@ -71,7 +89,7 @@ function walkForYaml(
         });
       } catch { /* skip unparseable */ }
     } else if (entry.isDirectory()) {
-      walkForYaml(full, depth + 1, maxDepth, results, wsRoot);
+      walkForYaml(full, depth + 1, maxDepth, results, wsRoot, seen);
     }
   }
 }

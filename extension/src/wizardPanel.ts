@@ -93,28 +93,48 @@ export class ScenarioWizardPanel {
   // ── save handler ──────────────────────────────────────────────────────
 
   private async handleSave(data: ScenarioFormData): Promise<void> {
-    // Default to scenarios/ in the workspace root
+    // Default to scenarios/ in the workspace root, creating it if needed
     const wsRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-    const defaultDir = wsRoot ? path.join(wsRoot, "scenarios") : undefined;
+    let defaultDir: string | undefined;
+    if (wsRoot) {
+      defaultDir = path.join(wsRoot, "scenarios");
+      if (!fs.existsSync(defaultDir)) {
+        fs.mkdirSync(defaultDir, { recursive: true });
+      }
+    }
 
-    const folder = await vscode.window.showOpenDialog({
-      canSelectFiles: false,
-      canSelectFolders: true,
-      canSelectMany: false,
-      openLabel: "Choose folder for scenario",
-      title: "Save scenario to…",
-      defaultUri: defaultDir ? vscode.Uri.file(defaultDir) : undefined,
-    });
+    // Offer quick save to workspace scenarios/ or custom location
+    const saveChoice = await vscode.window.showQuickPick(
+      [
+        { label: "$(folder) Save to workspace scenarios/", description: defaultDir ?? "", value: "workspace" },
+        { label: "$(folder-opened) Choose another location…", description: "", value: "browse" },
+      ],
+      { placeHolder: "Where should the scenario be saved?" },
+    );
 
-    if (!folder || folder.length === 0) {
-      return;
+    if (!saveChoice) { return; }
+
+    let targetDir: string | undefined;
+    if (saveChoice.value === "workspace" && defaultDir) {
+      targetDir = defaultDir;
+    } else {
+      const folder = await vscode.window.showOpenDialog({
+        canSelectFiles: false,
+        canSelectFolders: true,
+        canSelectMany: false,
+        openLabel: "Choose folder for scenario",
+        title: "Save scenario to…",
+        defaultUri: defaultDir ? vscode.Uri.file(defaultDir) : undefined,
+      });
+      if (!folder || folder.length === 0) { return; }
+      targetDir = folder[0].fsPath;
     }
 
     const dirName = data.scenarioName
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, "-")
       .replace(/(^-|-$)/g, "");
-    const scenarioDir = path.join(folder[0].fsPath, dirName);
+    const scenarioDir = path.join(targetDir, dirName);
 
     try {
       if (!fs.existsSync(scenarioDir)) {

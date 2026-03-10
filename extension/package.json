@@ -271,6 +271,12 @@
           "type": "number",
           "default": 900000,
           "description": "Pipeline timeout in milliseconds (default: 15 minutes)"
+        },
+        "docs-capacitor.scenarioPaths": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": [],
+          "description": "Additional directories to search for scenario.yaml files (absolute paths or relative to workspace root)"
         }
       }
     },
