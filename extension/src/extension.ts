@@ -4,6 +4,7 @@ import { ResultsProvider, PageResult, LlmFinding } from "./resultsProvider";
 import { PipelineRunner } from "./runner";
 import { ScenarioWizardPanel } from "./wizardPanel";
 import { ScenarioProvider, ScenarioItem } from "./scenarioProvider";
+import { showSetupReport, activationCheck } from "./setupChecker";
 
 const OUTPUT_CHANNEL_NAME = "Docs Capacitor";
 
@@ -370,7 +371,17 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
   );
 
+  // --- Setup Environment ---
+  context.subscriptions.push(
+    vscode.commands.registerCommand("docs-capacitor.setupEnvironment", () => {
+      showSetupReport(outputChannel);
+    }),
+  );
+
   outputChannel.appendLine("Docs Capacitor extension activated.");
+
+  // Run a lightweight prerequisite check after activation
+  activationCheck();
 }
 
 export function deactivate(): void {

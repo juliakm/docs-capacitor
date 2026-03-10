@@ -42,6 +42,12 @@
         "icon": "$(add)"
       },
       {
+        "command": "docs-capacitor.setupEnvironment",
+        "title": "Setup Environment",
+        "category": "Docs Capacitor",
+        "icon": "$(tools)"
+      },
+      {
         "command": "docs-capacitor.scenario.refresh",
         "title": "Refresh Scenarios",
         "category": "Docs Capacitor",
@@ -292,7 +298,7 @@
     "viewsWelcome": [
       {
         "view": "docsCapacitorScenarios",
-        "contents": "No scenario files found in this workspace.\n\nA scenario defines which docs to check and what rules to apply.\n\n[Create New Scenario](command:docs-capacitor.createScenario)\n\n[Open Existing Scenario](command:docs-capacitor.openScenario)\n\nTip: Open the docs-capacitor folder as your workspace, or place scenario.yaml files under a scenarios/ directory."
+        "contents": "No scenario files found in this workspace.\n\nA scenario defines which docs to check and what rules to apply.\n\n[Create New Scenario](command:docs-capacitor.createScenario)\n\n[Open Existing Scenario](command:docs-capacitor.openScenario)\n\n[Setup Environment](command:docs-capacitor.setupEnvironment)\n\nTip: Open the docs-capacitor folder as your workspace, or place scenario.yaml files under a scenarios/ directory."
       },
       {
         "view": "docsCapacitorResults",
