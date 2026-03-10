@@ -4,6 +4,15 @@ import * as path from "path";
 
 // ── Interfaces ───────────────────────────────────────────────────────
 
+/** A single LLM finding with detailed conflict information. */
+export interface LlmFinding {
+  title?: string;
+  conflict?: string;
+  article_quote?: string;
+  fact?: string;
+  severity?: string;
+}
+
 /** A single page result from the freshness pipeline. */
 export interface PageResult {
   url: string;
@@ -20,6 +29,7 @@ export interface PageResult {
   release_conflict_section?: string;
   agrees_with_regex?: boolean;
   repo?: string;
+  llm_findings?: LlmFinding[];
 }
 
 /** Format confidence for display — handles both string ("high") and numeric (0.85) values. */
@@ -258,9 +268,44 @@ export class ResultsProvider implements vscode.TreeDataProvider<ResultItem> {
       items.push(item);
     };
 
+    // Show LLM findings first — these are the most actionable
+    if (r.llm_findings && r.llm_findings.length > 0) {
+      for (const f of r.llm_findings) {
+        if (f.title) {
+          const item = new ResultItem(
+            f.severity ? `[${f.severity}] ${f.title}` : f.title,
+            "detail",
+            vscode.TreeItemCollapsibleState.None,
+          );
+          const mdParts: string[] = [`### ${f.title}`];
+          if (f.conflict) { mdParts.push(`\n**What's wrong:** ${f.conflict}`); }
+          if (f.article_quote) { mdParts.push(`\n**Article says:** _"${f.article_quote}"_`); }
+          if (f.fact) { mdParts.push(`\n**Should be:** ${f.fact}`); }
+          item.tooltip = new vscode.MarkdownString(mdParts.join("\n"));
+          item.tooltip.isTrusted = true;
+          item.description = f.conflict ?? "";
+          item.iconPath = new vscode.ThemeIcon(
+            f.severity === "P0" ? "flame" : f.severity === "P1" ? "warning" : "info",
+            f.severity === "P0" ? new vscode.ThemeColor("errorForeground") : undefined,
+          );
+          item.contextValue = "llmFinding";
+          items.push(item);
+        }
+        if (f.article_quote) {
+          add("Article quote", `"${f.article_quote}"`, "quote");
+        }
+        if (f.fact) {
+          add("Correct info", f.fact, "verified");
+        }
+      }
+    }
+
     add("Confidence", formatConfidence(r.confidence), "dashboard");
-    add("Reason", r.reason, "comment");
-    add("Suggested Fix", r.suggested_fix, "lightbulb");
+    if (!r.llm_findings?.length) {
+      // Only show generic reason/fix if there are no detailed LLM findings
+      add("Reason", r.reason, "comment");
+      add("Suggested Fix", r.suggested_fix, "lightbulb");
+    }
     add("Evidence", r.evidence, "search");
     add("Regex Evidence", r.regex_evidence, "regex");
     add("Release Section", r.release_conflict_section, "bookmark");
@@ -380,6 +425,15 @@ export class ResultsProvider implements vscode.TreeDataProvider<ResultItem> {
             release_conflict_section: item["release_conflict_section"] != null ? String(item["release_conflict_section"]) : undefined,
             agrees_with_regex: item["agrees_with_regex"] != null ? Boolean(item["agrees_with_regex"]) : undefined,
             repo: item["repo"] != null ? String(item["repo"]) : undefined,
+            llm_findings: Array.isArray(item["llm_findings"])
+              ? (item["llm_findings"] as Array<Record<string, unknown>>).map((f) => ({
+                  title: f["title"] != null ? String(f["title"]) : undefined,
+                  conflict: f["conflict"] != null ? String(f["conflict"]) : undefined,
+                  article_quote: f["article_quote"] != null ? String(f["article_quote"]) : undefined,
+                  fact: f["fact"] != null ? String(f["fact"]) : undefined,
+                  severity: f["severity"] != null ? String(f["severity"]) : undefined,
+                }))
+              : undefined,
           }));
         }
         return;

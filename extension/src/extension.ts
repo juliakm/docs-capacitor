@@ -1,6 +1,6 @@
 import * as vscode from "vscode";
 import * as path from "path";
-import { ResultsProvider } from "./resultsProvider";
+import { ResultsProvider, PageResult, LlmFinding } from "./resultsProvider";
 import { PipelineRunner } from "./runner";
 import { ScenarioWizardPanel } from "./wizardPanel";
 import { ScenarioProvider, ScenarioItem } from "./scenarioProvider";
@@ -219,6 +219,52 @@ export function activate(context: vscode.ExtensionContext): void {
         resultsProvider.markReviewed(url);
         vscode.window.showInformationMessage(`Marked as reviewed: ${url}`);
       }
+    }),
+  );
+
+  // --- Results: Fix with Copilot ---
+  context.subscriptions.push(
+    vscode.commands.registerCommand("docs-capacitor.fixWithCopilot", (item: { pageResult?: PageResult }) => {
+      const r = item?.pageResult;
+      if (!r) { return; }
+
+      const parts: string[] = [
+        `I need to fix an outdated documentation page on Microsoft Learn.`,
+        ``,
+        `**Page:** ${r.url}`,
+      ];
+
+      if (r.topic) { parts.push(`**Topic:** ${r.topic}`); }
+      parts.push(`**Classification:** ${r.classification}`);
+
+      if (r.llm_findings && r.llm_findings.length > 0) {
+        parts.push("", "## Issues Found");
+        for (const f of r.llm_findings as LlmFinding[]) {
+          if (f.title) { parts.push(`\n### ${f.title}`); }
+          if (f.conflict) { parts.push(`**Problem:** ${f.conflict}`); }
+          if (f.article_quote) { parts.push(`**The article says:** "${f.article_quote}"`); }
+          if (f.fact) { parts.push(`**Correct information:** ${f.fact}`); }
+        }
+      } else {
+        if (r.reason) { parts.push(`**Reason:** ${r.reason}`); }
+        if (r.evidence) { parts.push(`**Evidence:** ${r.evidence}`); }
+      }
+
+      parts.push("", "Please help me draft the corrected text for this article. Show me the specific paragraphs that need to change, with before/after versions.");
+
+      const prompt = parts.join("\n");
+
+      // Try GitHub Copilot Chat first, fall back to opening as a document
+      vscode.commands.executeCommand("workbench.action.chat.open", { query: prompt }).then(
+        undefined,
+        () => {
+          // Copilot Chat not available — copy to clipboard as fallback
+          vscode.env.clipboard.writeText(prompt);
+          vscode.window.showInformationMessage(
+            "Copilot Chat not available. Fix prompt copied to clipboard.",
+          );
+        },
+      );
     }),
   );
 

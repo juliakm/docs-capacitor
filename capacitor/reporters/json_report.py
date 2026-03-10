@@ -60,6 +60,7 @@ class JSONReporter(BaseReporter):
                 "release_conflict_section": row.get("release_conflict_section", ""),
                 "agrees_with_regex": row.get("agrees_with_regex", False),
                 "repo": row.get("repo", ""),
+                "llm_findings": row.get("llm_findings", []),
             })
 
         json_path.write_text(

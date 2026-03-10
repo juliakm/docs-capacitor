@@ -177,6 +177,28 @@ def agrees_with_regex(classification: str, regex_signal: str) -> bool:
     return False
 
 
+def _extract_llm_findings(group: Dict[str, Any]) -> List[Dict[str, str]]:
+    """Extract LLM-specific detail from grouped finding records."""
+    findings = []
+    for rec in group.get("records", []):
+        if rec.get("source") != "llm":
+            continue
+        finding: Dict[str, str] = {}
+        if rec.get("title"):
+            finding["title"] = str(rec["title"])
+        if rec.get("conflict"):
+            finding["conflict"] = str(rec["conflict"])
+        if rec.get("article_quote"):
+            finding["article_quote"] = str(rec["article_quote"])
+        if rec.get("fact"):
+            finding["fact"] = str(rec["fact"])
+        if rec.get("severity"):
+            finding["severity"] = str(rec["severity"])
+        if finding:
+            findings.append(finding)
+    return findings
+
+
 def classify_page(
     url: str,
     repo: str,
@@ -317,6 +339,8 @@ def classify_page(
         "release_conflict_section": release_conflict_section,
         "release_conflict_evidence": release_conflict_evidence,
         "agrees_with_regex": agrees_with_regex(classification, regex_signal),
+        # Carry through LLM detail for richer results display
+        "llm_findings": _extract_llm_findings(group),
     }
 
 
