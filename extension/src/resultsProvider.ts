@@ -142,6 +142,8 @@ export class ResultsProvider implements vscode.TreeDataProvider<ResultItem> {
   private reviewed: Set<string> = new Set();
   private activeFilter: string | undefined;
   private treeView: vscode.TreeView<ResultItem> | undefined;
+  /** Counts from the JSON meta block. */
+  private meta: { actionable: number; non_actionable: number; total: number } | undefined;
   /** The scenario whose results are currently displayed. */
   private activeScenario: string | undefined;
 
@@ -389,12 +391,14 @@ export class ResultsProvider implements vscode.TreeDataProvider<ResultItem> {
     }
     const outdated = all.filter((r) => r.classification === "P0_OUTDATED").length;
     const needsReview = all.filter((r) => r.classification === "NEEDS_CLARIFICATION").length;
-    const upToDate = all.filter((r) => r.classification === "UP_TO_DATE").length;
     const parts: string[] = [];
-    if (outdated > 0) { parts.push(`${outdated} outdated`); }
-    if (needsReview > 0) { parts.push(`${needsReview} needs review`); }
-    if (upToDate > 0) { parts.push(`${upToDate} up to date`); }
+    if (outdated > 0) { parts.push(`🔥 ${outdated} outdated`); }
+    if (needsReview > 0) { parts.push(`⚠️ ${needsReview} needs review`); }
     if (parts.length === 0) { parts.push(`${all.length} results`); }
+    // Show total scanned vs actionable from meta
+    if (this.meta) {
+      parts.push(`(${this.meta.actionable} actionable of ${this.meta.total} scanned)`);
+    }
     const scenarioNote = this.activeScenario ? ` [${this.activeScenario}]` : "";
     const filterNote = this.activeFilter ? ` (filtered: ${this.activeFilter})` : "";
     this.treeView.message = parts.join(", ") + scenarioNote + filterNote;
@@ -480,26 +484,48 @@ export class ResultsProvider implements vscode.TreeDataProvider<ResultItem> {
     try {
       const raw = fs.readFileSync(jsonPath, "utf-8");
       const data: unknown = JSON.parse(raw);
-      if (Array.isArray(data)) {
-        this.results = data.map((item: Record<string, unknown>) => ({
-          url: String(item["url"] ?? ""),
-          title: item["title"] != null ? String(item["title"]) : undefined,
-          classification: String(item["classification"] ?? "unknown"),
-          confidence: item["confidence"] != null ? (typeof item["confidence"] === "string" ? String(item["confidence"]) : Number(item["confidence"])) : 0,
-          topic: item["topic"] != null ? String(item["topic"]) : undefined,
-          reason: item["reason"] != null ? String(item["reason"]) : undefined,
-          suggested_fix: item["suggested_fix"] != null ? String(item["suggested_fix"]) : undefined,
-          evidence: item["evidence"] != null ? String(item["evidence"]) : undefined,
-          regex_evidence: item["regex_evidence"] != null ? String(item["regex_evidence"]) : undefined,
-          regex_signals: Array.isArray(item["regex_signals"])
-            ? (item["regex_signals"] as unknown[]).map(String)
+
+      // Support both new {meta, results} format and legacy flat array
+      let items: unknown[];
+      if (data && typeof data === "object" && !Array.isArray(data)) {
+        const wrapper = data as Record<string, unknown>;
+        items = Array.isArray(wrapper["results"]) ? wrapper["results"] as unknown[] : [];
+        const m = wrapper["meta"] as Record<string, unknown> | undefined;
+        if (m) {
+          this.meta = {
+            actionable: Number(m["actionable"] ?? 0),
+            non_actionable: Number(m["non_actionable"] ?? 0),
+            total: Number(m["total"] ?? 0),
+          };
+        }
+      } else if (Array.isArray(data)) {
+        items = data;
+        this.meta = undefined;
+      } else {
+        return false;
+      }
+
+      this.results = items.map((item: unknown) => {
+        const r = item as Record<string, unknown>;
+        return {
+          url: String(r["url"] ?? ""),
+          title: r["title"] != null ? String(r["title"]) : undefined,
+          classification: String(r["classification"] ?? "unknown"),
+          confidence: r["confidence"] != null ? (typeof r["confidence"] === "string" ? String(r["confidence"]) : Number(r["confidence"])) : 0,
+          topic: r["topic"] != null ? String(r["topic"]) : undefined,
+          reason: r["reason"] != null ? String(r["reason"]) : undefined,
+          suggested_fix: r["suggested_fix"] != null ? String(r["suggested_fix"]) : undefined,
+          evidence: r["evidence"] != null ? String(r["evidence"]) : undefined,
+          regex_evidence: r["regex_evidence"] != null ? String(r["regex_evidence"]) : undefined,
+          regex_signals: Array.isArray(r["regex_signals"])
+            ? (r["regex_signals"] as unknown[]).map(String)
             : undefined,
-          regex_signal: item["regex_signal"] != null ? String(item["regex_signal"]) : undefined,
-          release_conflict_section: item["release_conflict_section"] != null ? String(item["release_conflict_section"]) : undefined,
-          agrees_with_regex: item["agrees_with_regex"] != null ? Boolean(item["agrees_with_regex"]) : undefined,
-          repo: item["repo"] != null ? String(item["repo"]) : undefined,
-          llm_findings: Array.isArray(item["llm_findings"])
-            ? (item["llm_findings"] as Array<Record<string, unknown>>).map((f) => ({
+          regex_signal: r["regex_signal"] != null ? String(r["regex_signal"]) : undefined,
+          release_conflict_section: r["release_conflict_section"] != null ? String(r["release_conflict_section"]) : undefined,
+          agrees_with_regex: r["agrees_with_regex"] != null ? Boolean(r["agrees_with_regex"]) : undefined,
+          repo: r["repo"] != null ? String(r["repo"]) : undefined,
+          llm_findings: Array.isArray(r["llm_findings"])
+            ? (r["llm_findings"] as Array<Record<string, unknown>>).map((f) => ({
                 title: f["title"] != null ? String(f["title"]) : undefined,
                 conflict: f["conflict"] != null ? String(f["conflict"]) : undefined,
                 article_quote: f["article_quote"] != null ? String(f["article_quote"]) : undefined,
@@ -507,9 +533,9 @@ export class ResultsProvider implements vscode.TreeDataProvider<ResultItem> {
                 severity: f["severity"] != null ? String(f["severity"]) : undefined,
               }))
             : undefined,
-        }));
-        return true;
-      }
+        };
+      });
+      return true;
     } catch { /* fall through */ }
     return false;
   }

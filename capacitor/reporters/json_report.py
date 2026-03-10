@@ -71,8 +71,14 @@ class JSONReporter(BaseReporter):
                 "llm_findings": row.get("llm_findings", []),
             })
 
+        metadata = {
+            "actionable": len(output),
+            "non_actionable": skipped,
+            "total": len(output) + skipped,
+        }
+
         json_path.write_text(
-            json.dumps(output, indent=2, ensure_ascii=False) + "\n",
+            json.dumps({"meta": metadata, "results": output}, indent=2, ensure_ascii=False) + "\n",
             encoding="utf-8",
         )
         if skipped:
