@@ -9,14 +9,21 @@ interface ScenarioFormData {
   scenarioName: string;
   description: string;
   learnQueries: string[];
+  learnPathScopes: string[];
+  learnExcludeUrlPatterns: string[];
   githubOrgs: string[];
+  githubQueries: string[];
   excludedRepos: string[];
+  relevantUrls: string[];
+  skipUrls: string[];
   keyFacts: string[];
   enableLlm: boolean;
   productPatterns: string[];
   toolPatterns: string[];
   releaseNotesUrl: string;
   sectionPattern: string;
+  reportTitle: string;
+  reportFormats: string[];
 }
 
 /**
@@ -86,12 +93,17 @@ export class ScenarioWizardPanel {
   // ── save handler ──────────────────────────────────────────────────────
 
   private async handleSave(data: ScenarioFormData): Promise<void> {
+    // Default to scenarios/ in the workspace root
+    const wsRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+    const defaultDir = wsRoot ? path.join(wsRoot, "scenarios") : undefined;
+
     const folder = await vscode.window.showOpenDialog({
       canSelectFiles: false,
       canSelectFolders: true,
       canSelectMany: false,
       openLabel: "Choose folder for scenario",
       title: "Save scenario to…",
+      defaultUri: defaultDir ? vscode.Uri.file(defaultDir) : undefined,
     });
 
     if (!folder || folder.length === 0) {
@@ -118,6 +130,18 @@ export class ScenarioWizardPanel {
       fs.writeFileSync(path.join(scenarioDir, "rules.yaml"), rulesYaml, "utf-8");
       fs.writeFileSync(path.join(scenarioDir, "strategy.yaml"), strategyYaml, "utf-8");
 
+      // Create prompt template directory and default template if LLM is enabled
+      if (data.enableLlm) {
+        const promptsDir = path.join(scenarioDir, "prompts");
+        if (!fs.existsSync(promptsDir)) {
+          fs.mkdirSync(promptsDir, { recursive: true });
+        }
+        const templatePath = path.join(promptsDir, "detect.md.j2");
+        if (!fs.existsSync(templatePath)) {
+          fs.writeFileSync(templatePath, generatePromptTemplate(), "utf-8");
+        }
+      }
+
       vscode.window.showInformationMessage(`Scenario saved to ${scenarioDir}`);
 
       const doc = await vscode.workspace.openTextDocument(scenarioFile);
@@ -129,7 +153,7 @@ export class ScenarioWizardPanel {
         "Skip",
       );
       if (runValidation === "Validate") {
-        await vscode.commands.executeCommand("docs-capacitor.validate");
+        await vscode.commands.executeCommand("docs-capacitor.validate", scenarioFile);
       }
 
       this.panel.dispose();
@@ -184,6 +208,10 @@ export class ScenarioWizardPanel {
 
     .error { color: var(--vscode-errorForeground); font-size: 12px; margin-top: 2px; display: none; }
 
+    /* collapsible sections */
+    details { margin-top: 12px; }
+    details summary { cursor: pointer; font-weight: 600; font-size: 13px; }
+
     /* buttons */
     .btn-row { display: flex; gap: 8px; margin-top: 20px; }
     button {
@@ -224,72 +252,134 @@ export class ScenarioWizardPanel {
 <!-- Step 1: Basics -->
 <div class="step" data-step="1">
   <h2>Step 1 — Basics</h2>
+  <p class="hint">Define the product whose documentation you want to check for freshness.</p>
+
   <label for="productName">Product name <span style="color:var(--vscode-errorForeground)">*</span></label>
-  <input type="text" id="productName" placeholder="e.g. Azure Kubernetes Service" />
+  <div class="hint">The product or service whose docs may be outdated.</div>
+  <input type="text" id="productName" placeholder="e.g. Azure Kubernetes Service, GitHub Copilot" />
   <div class="error" id="productNameError">Product name is required.</div>
 
-  <label for="toolName">Tool / CLI name <span class="hint">(optional)</span></label>
-  <input type="text" id="toolName" placeholder="e.g. kubectl" />
+  <label for="toolName">Tool / IDE name <span class="hint">(optional)</span></label>
+  <div class="hint">If the product is used within a specific tool or IDE, specify it here.</div>
+  <input type="text" id="toolName" placeholder="e.g. Visual Studio, VS Code, kubectl" />
 
   <label for="scenarioName">Scenario name <span style="color:var(--vscode-errorForeground)">*</span></label>
-  <input type="text" id="scenarioName" placeholder="e.g. aks-api-version" />
+  <div class="hint">A short slug for this check scenario (used as folder name).</div>
+  <input type="text" id="scenarioName" placeholder="e.g. aks-api-version, copilot-vs-install" />
   <div class="error" id="scenarioNameError">Scenario name is required.</div>
 
   <label for="description">Description</label>
-  <textarea id="description" rows="3" placeholder="What does this scenario check?"></textarea>
+  <textarea id="description" rows="3" placeholder="What outdated content are you looking for? e.g. Find articles that still reference the old Marketplace install path for Copilot in Visual Studio."></textarea>
 </div>
 
-<!-- Step 2: Search -->
+<!-- Step 2: Search Sources -->
 <div class="step" data-step="2">
   <h2>Step 2 — Search Sources</h2>
-  <label for="learnQueries">Microsoft Learn API queries <span style="color:var(--vscode-errorForeground)">*</span></label>
-  <div class="hint">One query path per line, e.g. /azure/aks</div>
-  <textarea id="learnQueries" rows="4" placeholder="/azure/aks&#10;/azure/aks/concepts"></textarea>
+  <p class="hint">Configure where to search for documentation pages to check.</p>
+
+  <label for="learnQueries">Microsoft Learn search queries <span style="color:var(--vscode-errorForeground)">*</span></label>
+  <div class="hint">Search terms to find relevant articles on learn.microsoft.com. One per line.</div>
+  <textarea id="learnQueries" rows="3" placeholder="GitHub Copilot Visual Studio&#10;Copilot install getting started&#10;az aks create"></textarea>
   <div class="error" id="learnQueriesError">At least one search query is required.</div>
 
-  <label for="githubOrgs">GitHub organizations</label>
-  <div class="hint">One org per line</div>
-  <textarea id="githubOrgs" rows="3" placeholder="Azure&#10;microsoft"></textarea>
+  <details>
+    <summary>Learn path scopes (optional)</summary>
+    <div class="hint" style="margin-top:4px">Restrict Learn results to specific doc areas. One URL path prefix per line. Leave empty to search all of Learn.</div>
+    <textarea id="learnPathScopes" rows="3" placeholder="/en-us/azure/aks/&#10;/en-us/cli/azure/"></textarea>
+  </details>
 
-  <label for="excludedRepos">Excluded repositories</label>
-  <div class="hint">One repo per line (org/repo)</div>
-  <textarea id="excludedRepos" rows="3" placeholder="Azure/azure-docs-archive"></textarea>
+  <details>
+    <summary>Exclude URL patterns (optional)</summary>
+    <div class="hint" style="margin-top:4px">Skip Learn results whose URL contains any of these substrings. One per line.</div>
+    <textarea id="learnExcludeUrlPatterns" rows="2" placeholder="visual-studio-code&#10;release-notes"></textarea>
+  </details>
+
+  <label for="githubOrgs">GitHub organizations</label>
+  <div class="hint">Search code in these GitHub orgs. One per line.</div>
+  <textarea id="githubOrgs" rows="2" placeholder="MicrosoftDocs&#10;Azure"></textarea>
+
+  <label for="githubQueries">GitHub search queries</label>
+  <div class="hint">Code search queries to find docs in GitHub. One per line.</div>
+  <textarea id="githubQueries" rows="3" placeholder='"Manage Extensions" copilot "Visual Studio"&#10;marketplace.visualstudio.com copilot'></textarea>
+
+  <details>
+    <summary>Excluded repositories (optional)</summary>
+    <div class="hint" style="margin-top:4px">Skip results from these repos (org/repo format). One per line.</div>
+    <textarea id="excludedRepos" rows="2" placeholder="MicrosoftDocs/visualstudio-docs-archive-pr"></textarea>
+  </details>
+
+  <details>
+    <summary>URL filters (optional)</summary>
+    <div class="hint" style="margin-top:4px"><strong>Relevant URLs</strong> — Only keep pages whose URL contains one of these substrings. Leave empty to accept all.</div>
+    <textarea id="relevantUrls" rows="2" placeholder="/azure/aks/&#10;/training/modules/"></textarea>
+    <div class="hint" style="margin-top:8px"><strong>Skip URLs</strong> — Discard pages whose URL contains any of these substrings.</div>
+    <textarea id="skipUrls" rows="2" placeholder="/release-notes/&#10;/microsoft-365-copilot/"></textarea>
+  </details>
 </div>
 
 <!-- Step 3: Detection -->
 <div class="step" data-step="3">
   <h2>Step 3 — Detection</h2>
-  <label for="keyFacts">Key facts to detect</label>
-  <div class="hint">One fact per line — API versions, SDK versions, etc.</div>
-  <textarea id="keyFacts" rows="5" placeholder="2024-01-01&#10;v5.0.0"></textarea>
+  <p class="hint">Configure how the pipeline identifies outdated content.</p>
+
+  <label for="keyFacts">Key facts about current product state</label>
+  <div class="hint">Write clear, factual statements about how your product works <strong>today</strong>. These are injected into the AI prompt as ground truth. One fact per line.</div>
+  <textarea id="keyFacts" rows="6" placeholder="Copilot is built into Visual Studio 2022 17.10+ — no extension install needed.&#10;The Manage Extensions dialog is NOT the correct install path for Copilot in VS 2022 17.10+.&#10;For VS 2022 before 17.10, users DO still need to install via Manage Extensions."></textarea>
 
   <div class="checkbox-row">
-    <input type="checkbox" id="enableLlm" />
-    <label for="enableLlm" style="margin:0;font-weight:normal">Enable LLM-assisted detection</label>
+    <input type="checkbox" id="enableLlm" checked />
+    <label for="enableLlm" style="margin:0;font-weight:normal">Enable AI-assisted detection (recommended)</label>
   </div>
+  <div class="hint" style="margin-left:26px">Uses an AI model to analyze each page against your key facts. Catches issues that regex rules alone can't find. Adds ~2-5 minutes to a run depending on how many pages are found.</div>
 </div>
 
 <!-- Step 4: Classification -->
 <div class="step" data-step="4">
-  <h2>Step 4 — Classification Patterns</h2>
-  <label for="productPatterns">Product version patterns</label>
-  <div class="hint">Regex patterns, one per line — e.g. v\\d+\\.\\d+\\.\\d+</div>
-  <textarea id="productPatterns" rows="4" placeholder="\\d{4}-\\d{2}-\\d{2}&#10;v\\d+\\.\\d+"></textarea>
+  <h2>Step 4 — Classification</h2>
+  <p class="hint">Define patterns that identify your product in article text, used to determine if a page is in scope.</p>
 
-  <label for="toolPatterns">Tool / CLI version patterns</label>
-  <div class="hint">Regex patterns, one per line</div>
-  <textarea id="toolPatterns" rows="4" placeholder="\\d+\\.\\d+\\.\\d+"></textarea>
+  <label for="productPatterns">Product name patterns <span style="color:var(--vscode-errorForeground)">*</span></label>
+  <div class="hint">Regex patterns that match your product name in article text. One per line. These are case-insensitive.</div>
+  <textarea id="productPatterns" rows="3" placeholder="azure\\s+kubernetes\\s+service&#10;\\baks\\b"></textarea>
+  <div class="error" id="productPatternsError">At least one product pattern is required.</div>
+
+  <label for="toolPatterns">Tool name patterns <span class="hint">(optional)</span></label>
+  <div class="hint">Regex patterns matching the tool or IDE name. Used to narrow scope when your product appears in multiple contexts.</div>
+  <textarea id="toolPatterns" rows="2" placeholder="visual\\s+studio\\b(?!\\s*code)"></textarea>
 </div>
 
-<!-- Step 5: Release Notes -->
+<!-- Step 5: Release Notes & Reporting -->
 <div class="step" data-step="5">
-  <h2>Step 5 — Release Notes</h2>
-  <label for="releaseNotesUrl">Release notes URL</label>
+  <h2>Step 5 — Release Notes &amp; Reporting</h2>
+
+  <label for="releaseNotesUrl">Release notes URL <span class="hint">(optional)</span></label>
+  <div class="hint">URL to your product's release notes page on learn.microsoft.com. Used to correlate findings with recent changes.</div>
   <input type="text" id="releaseNotesUrl" placeholder="https://learn.microsoft.com/azure/aks/release-notes" />
 
   <label for="sectionPattern">Section heading pattern</label>
-  <div class="hint">Regex to match release-note section headings</div>
+  <div class="hint">Regex to identify relevant sections in the release notes page, e.g. a date heading or version heading.</div>
   <input type="text" id="sectionPattern" placeholder="## \\d{4}-\\d{2}-\\d{2}" />
+
+  <hr style="margin-top:20px; border-color: var(--vscode-widget-border, #555);" />
+
+  <label for="reportTitle">Report title</label>
+  <input type="text" id="reportTitle" placeholder="" />
+  <div class="hint">Leave blank to auto-generate from scenario name.</div>
+
+  <label>Report formats</label>
+  <div class="hint" style="margin-bottom:4px">Choose which output formats to generate.</div>
+  <div class="checkbox-row">
+    <input type="checkbox" id="fmtMarkdown" checked />
+    <label for="fmtMarkdown" style="margin:0;font-weight:normal">Markdown</label>
+  </div>
+  <div class="checkbox-row">
+    <input type="checkbox" id="fmtCsv" checked />
+    <label for="fmtCsv" style="margin:0;font-weight:normal">CSV</label>
+  </div>
+  <div class="checkbox-row">
+    <input type="checkbox" id="fmtJson" />
+    <label for="fmtJson" style="margin:0;font-weight:normal">JSON</label>
+  </div>
 </div>
 
 <!-- Step 6: Preview & Save -->
@@ -349,6 +439,11 @@ export class ScenarioWizardPanel {
     $('#btnSave').style.display = n === TOTAL_STEPS ? '' : 'none';
     renderStepBar();
     if (n === TOTAL_STEPS) { renderPreview(); }
+    // Auto-fill report title if blank
+    if (n === 5 && !$('#reportTitle').value.trim()) {
+      const name = $('#scenarioName').value.trim();
+      if (name) { $('#reportTitle').value = name + ' — Freshness Report'; }
+    }
   }
 
   // ── validation ─────────────────────────────────────────────────────
@@ -361,7 +456,14 @@ export class ScenarioWizardPanel {
       return ok;
     }
     if (step === 2) {
-      if (!$('#learnQueries').value.trim()) { showError('learnQueriesError'); return false; }
+      if (!$('#learnQueries').value.trim() && !$('#githubQueries').value.trim()) {
+        showError('learnQueriesError');
+        return false;
+      }
+      return true;
+    }
+    if (step === 4) {
+      if (!$('#productPatterns').value.trim()) { showError('productPatternsError'); return false; }
       return true;
     }
     return true;
@@ -373,20 +475,32 @@ export class ScenarioWizardPanel {
   function lines(id) { return ($('#' + id).value || '').split('\\n').map(l => l.trim()).filter(Boolean); }
 
   function collectData() {
+    const formats = [];
+    if ($('#fmtMarkdown').checked) formats.push('markdown');
+    if ($('#fmtCsv').checked) formats.push('csv');
+    if ($('#fmtJson').checked) formats.push('json');
+
     return {
       productName: $('#productName').value.trim(),
       toolName: $('#toolName').value.trim(),
       scenarioName: $('#scenarioName').value.trim(),
       description: $('#description').value.trim(),
       learnQueries: lines('learnQueries'),
+      learnPathScopes: lines('learnPathScopes'),
+      learnExcludeUrlPatterns: lines('learnExcludeUrlPatterns'),
       githubOrgs: lines('githubOrgs'),
+      githubQueries: lines('githubQueries'),
       excludedRepos: lines('excludedRepos'),
+      relevantUrls: lines('relevantUrls'),
+      skipUrls: lines('skipUrls'),
       keyFacts: lines('keyFacts'),
       enableLlm: $('#enableLlm').checked,
       productPatterns: lines('productPatterns'),
       toolPatterns: lines('toolPatterns'),
       releaseNotesUrl: $('#releaseNotesUrl').value.trim(),
       sectionPattern: $('#sectionPattern').value.trim(),
+      reportTitle: $('#reportTitle').value.trim(),
+      reportFormats: formats,
     };
   }
 
@@ -403,68 +517,142 @@ export class ScenarioWizardPanel {
   function buildScenarioYaml(d) {
     let y = '';
     y += 'name: ' + quoteYaml(d.scenarioName) + '\\n';
-    if (d.description) y += 'description: ' + quoteYaml(d.description) + '\\n';
-    y += 'product: ' + quoteYaml(d.productName) + '\\n';
-    if (d.toolName) y += 'tool: ' + quoteYaml(d.toolName) + '\\n';
-    y += '\\n# Search sources\\n';
-    y += 'sources:\\n';
+    if (d.description) y += 'description: >\\n  ' + d.description.replace(/\\n/g, '\\n  ') + '\\n';
+    y += '\\nproduct:\\n';
+    y += '  name: ' + quoteYaml(d.productName) + '\\n';
+    if (d.toolName) y += '  tool: ' + quoteYaml(d.toolName) + '\\n';
+
+    y += '\\nsearch:\\n';
     if (d.learnQueries.length) {
-      y += '  - type: learn\\n';
+      y += '  learn:\\n';
       y += '    queries:\\n';
       y += yamlList(d.learnQueries, '      ');
+      if (d.learnPathScopes.length) {
+        y += '    path_scopes:\\n';
+        y += yamlList(d.learnPathScopes, '      ');
+      }
+      if (d.learnExcludeUrlPatterns.length) {
+        y += '    exclude_url_patterns:\\n';
+        y += yamlList(d.learnExcludeUrlPatterns, '      ');
+      }
     }
-    if (d.githubOrgs.length) {
-      y += '  - type: github\\n';
-      y += '    orgs:\\n';
-      y += yamlList(d.githubOrgs, '      ');
+    if (d.githubOrgs.length || d.githubQueries.length) {
+      y += '  github:\\n';
+      if (d.githubOrgs.length) {
+        y += '    orgs:\\n';
+        y += yamlList(d.githubOrgs, '      ');
+      }
+      if (d.githubQueries.length) {
+        y += '    queries:\\n';
+        y += yamlList(d.githubQueries, '      ');
+      }
       if (d.excludedRepos.length) {
         y += '    excluded_repos:\\n';
         y += yamlList(d.excludedRepos, '      ');
       }
     }
-    if (d.releaseNotesUrl) {
-      y += '  - type: release_notes\\n';
-      y += '    url: ' + quoteYaml(d.releaseNotesUrl) + '\\n';
-      if (d.sectionPattern) y += '    section_pattern: ' + quoteYaml(d.sectionPattern) + '\\n';
-    }
-    y += '\\n# Detection\\n';
-    if (d.keyFacts.length) {
-      y += 'key_facts:\\n';
-      y += yamlList(d.keyFacts, '  ');
-    }
-    y += 'enable_llm: ' + d.enableLlm + '\\n';
-    y += '\\n# Classification & rules\\n';
-    y += 'strategies:\\n  - name: default\\n';
-    y += 'rules:\\n  - name: default\\n';
-    return y;
-  }
 
-  function buildRulesYaml(d) {
-    let y = '# Rules for ' + d.scenarioName + '\\n';
-    y += 'rules:\\n';
-    y += '  - name: default\\n';
-    y += '    description: Default classification rule\\n';
-    if (d.productPatterns.length) {
-      y += '    product_patterns:\\n';
-      y += yamlList(d.productPatterns, '      ');
+    if (d.relevantUrls.length || d.skipUrls.length) {
+      y += '\\nurl_filters:\\n';
+      if (d.relevantUrls.length) {
+        y += '  relevant:\\n';
+        y += yamlList(d.relevantUrls, '    ');
+      } else {
+        y += '  relevant: []\\n';
+      }
+      if (d.skipUrls.length) {
+        y += '  skip:\\n';
+        y += yamlList(d.skipUrls, '    ');
+      } else {
+        y += '  skip: []\\n';
+      }
     }
+
+    y += '\\ndetection:\\n';
+    y += '  regex_rules: rules.yaml\\n';
+    if (d.enableLlm) {
+      y += '  llm:\\n';
+      y += '    prompt_template: prompts/detect.md.j2\\n';
+      if (d.keyFacts.length) {
+        y += '    key_facts:\\n';
+        y += yamlList(d.keyFacts, '      ');
+      }
+      y += '    max_article_chars: 8000\\n';
+      y += '    rate_limit_rpm: 10\\n';
+    }
+
+    y += '\\nclassification:\\n';
+    y += '  strategy: strategy.yaml\\n';
+    y += '  scope:\\n';
+    y += '    product_patterns:\\n';
+    y += yamlList(d.productPatterns, '      ');
     if (d.toolPatterns.length) {
       y += '    tool_patterns:\\n';
       y += yamlList(d.toolPatterns, '      ');
     }
+
+    if (d.releaseNotesUrl) {
+      y += '\\nrelease_notes:\\n';
+      y += '  url: ' + quoteYaml(d.releaseNotesUrl) + '\\n';
+      if (d.sectionPattern) y += '  section_pattern: ' + quoteYaml(d.sectionPattern) + '\\n';
+      y += '  section_key: product_sections\\n';
+    }
+
+    y += '\\nreporting:\\n';
+    const title = d.reportTitle || d.scenarioName + ' — Freshness Report';
+    y += '  title: ' + quoteYaml(title) + '\\n';
+    y += '  formats:\\n';
+    y += yamlList(d.reportFormats.length ? d.reportFormats : ['markdown'], '    ');
+
+    return y;
+  }
+
+  function buildRulesYaml(d) {
+    let y = '# Regex detection rules for ' + d.scenarioName + '\\n';
+    y += '# Add patterns that match outdated content in article text.\\n\\n';
+    y += 'filters:\\n';
+    y += '  include:\\n';
+    y += '    url_regex:\\n';
+    y += '      - "learn\\\\.microsoft\\\\.com"\\n';
+    y += '  exclude:\\n';
+    y += '    url_regex:\\n';
+    y += '      - release-notes\\n\\n';
+    y += 'rules:\\n';
+    y += '  - id: EXAMPLE_OUTDATED\\n';
+    y += '    title: "References outdated pattern"\\n';
+    y += '    severity: P0\\n';
+    y += '    match:\\n';
+    y += '      any_regex:\\n';
+    y += '        - "(?i)REPLACE_WITH_OUTDATED_PATTERN"\\n';
+    y += '    unless:\\n';
+    y += '      any_regex: []\\n';
     return y;
   }
 
   function buildStrategyYaml(d) {
-    let y = '# Strategy for ' + d.scenarioName + '\\n';
-    y += 'strategies:\\n';
-    y += '  - name: default\\n';
-    y += '    description: Default detection strategy\\n';
-    if (d.keyFacts.length) {
-      y += '    key_facts:\\n';
-      y += yamlList(d.keyFacts, '      ');
+    let y = '# Classification strategy for ' + d.scenarioName + '\\n\\n';
+    y += 'meta:\\n';
+    y += '  name: ' + quoteYaml(d.scenarioName) + '\\n';
+    y += '  version: "1.0"\\n\\n';
+    y += 'scope:\\n';
+    y += '  product_patterns:\\n';
+    y += yamlList(d.productPatterns, '    ');
+    if (d.toolPatterns.length) {
+      y += '  tool_patterns:\\n';
+      y += yamlList(d.toolPatterns, '    ');
     }
-    y += '    enable_llm: ' + d.enableLlm + '\\n';
+    y += '\\nhard_exclusions:\\n';
+    y += '  url_regex: []\\n';
+    y += '  repo_regex: []\\n';
+    y += '\\nclassification:\\n';
+    y += '  default_confidence:\\n';
+    y += '    p0_outdated: high\\n';
+    y += '    needs_clarification: medium\\n';
+    y += '    up_to_date: medium\\n';
+    y += '    excluded: high\\n';
+    y += '\\ntopic_rules: []\\n';
+    y += '# Add topic rules to classify findings into specific areas.\\n';
+    y += '# See scenarios/copilot-vs/strategy.yaml for examples.\\n';
     return y;
   }
 
@@ -522,80 +710,192 @@ export function generateScenarioYaml(d: ScenarioFormData): string {
   let y = "";
   y += `name: ${quoteYaml(d.scenarioName)}\n`;
   if (d.description) {
-    y += `description: ${quoteYaml(d.description)}\n`;
-  }
-  y += `product: ${quoteYaml(d.productName)}\n`;
-  if (d.toolName) {
-    y += `tool: ${quoteYaml(d.toolName)}\n`;
+    y += `description: >\n  ${d.description.replace(/\n/g, "\n  ")}\n`;
   }
 
-  y += "\n# Search sources\n";
-  y += "sources:\n";
+  y += "\nproduct:\n";
+  y += `  name: ${quoteYaml(d.productName)}\n`;
+  if (d.toolName) {
+    y += `  tool: ${quoteYaml(d.toolName)}\n`;
+  }
+
+  y += "\nsearch:\n";
   if (d.learnQueries.length) {
-    y += "  - type: learn\n";
+    y += "  learn:\n";
     y += "    queries:\n";
     y += yamlList(d.learnQueries, "      ");
+    if (d.learnPathScopes.length) {
+      y += "    path_scopes:\n";
+      y += yamlList(d.learnPathScopes, "      ");
+    }
+    if (d.learnExcludeUrlPatterns.length) {
+      y += "    exclude_url_patterns:\n";
+      y += yamlList(d.learnExcludeUrlPatterns, "      ");
+    }
   }
-  if (d.githubOrgs.length) {
-    y += "  - type: github\n";
-    y += "    orgs:\n";
-    y += yamlList(d.githubOrgs, "      ");
+  if (d.githubOrgs.length || d.githubQueries.length) {
+    y += "  github:\n";
+    if (d.githubOrgs.length) {
+      y += "    orgs:\n";
+      y += yamlList(d.githubOrgs, "      ");
+    }
+    if (d.githubQueries.length) {
+      y += "    queries:\n";
+      y += yamlList(d.githubQueries, "      ");
+    }
     if (d.excludedRepos.length) {
       y += "    excluded_repos:\n";
       y += yamlList(d.excludedRepos, "      ");
     }
   }
-  if (d.releaseNotesUrl) {
-    y += "  - type: release_notes\n";
-    y += `    url: ${quoteYaml(d.releaseNotesUrl)}\n`;
-    if (d.sectionPattern) {
-      y += `    section_pattern: ${quoteYaml(d.sectionPattern)}\n`;
+
+  if (d.relevantUrls.length || d.skipUrls.length) {
+    y += "\nurl_filters:\n";
+    if (d.relevantUrls.length) {
+      y += "  relevant:\n";
+      y += yamlList(d.relevantUrls, "    ");
+    } else {
+      y += "  relevant: []\n";
+    }
+    if (d.skipUrls.length) {
+      y += "  skip:\n";
+      y += yamlList(d.skipUrls, "    ");
+    } else {
+      y += "  skip: []\n";
     }
   }
 
-  y += "\n# Detection\n";
-  if (d.keyFacts.length) {
-    y += "key_facts:\n";
-    y += yamlList(d.keyFacts, "  ");
+  y += "\ndetection:\n";
+  y += "  regex_rules: rules.yaml\n";
+  if (d.enableLlm) {
+    y += "  llm:\n";
+    y += "    prompt_template: prompts/detect.md.j2\n";
+    if (d.keyFacts.length) {
+      y += "    key_facts:\n";
+      y += yamlList(d.keyFacts, "      ");
+    }
+    y += "    max_article_chars: 8000\n";
+    y += "    rate_limit_rpm: 10\n";
   }
-  y += `enable_llm: ${d.enableLlm}\n`;
 
-  y += "\n# Classification & rules\n";
-  y += "strategies:\n  - name: default\n";
-  y += "rules:\n  - name: default\n";
-  return y;
-}
-
-export function generateRulesYaml(d: ScenarioFormData): string {
-  let y = `# Rules for ${d.scenarioName}\n`;
-  y += "rules:\n";
-  y += "  - name: default\n";
-  y += "    description: Default classification rule\n";
-  if (d.productPatterns.length) {
-    y += "    product_patterns:\n";
-    y += yamlList(d.productPatterns, "      ");
-  }
+  y += "\nclassification:\n";
+  y += "  strategy: strategy.yaml\n";
+  y += "  scope:\n";
+  y += "    product_patterns:\n";
+  y += yamlList(d.productPatterns, "      ");
   if (d.toolPatterns.length) {
     y += "    tool_patterns:\n";
     y += yamlList(d.toolPatterns, "      ");
   }
+
+  if (d.releaseNotesUrl) {
+    y += "\nrelease_notes:\n";
+    y += `  url: ${quoteYaml(d.releaseNotesUrl)}\n`;
+    if (d.sectionPattern) {
+      y += `  section_pattern: ${quoteYaml(d.sectionPattern)}\n`;
+    }
+    y += "  section_key: product_sections\n";
+  }
+
+  y += "\nreporting:\n";
+  const title = d.reportTitle || `${d.scenarioName} — Freshness Report`;
+  y += `  title: ${quoteYaml(title)}\n`;
+  y += "  formats:\n";
+  y += yamlList(d.reportFormats.length ? d.reportFormats : ["markdown"], "    ");
+
+  return y;
+}
+
+export function generateRulesYaml(d: ScenarioFormData): string {
+  let y = `# Regex detection rules for ${d.scenarioName}\n`;
+  y += "# Add patterns that match outdated content in article text.\n\n";
+  y += "filters:\n";
+  y += "  include:\n";
+  y += "    url_regex:\n";
+  y += '      - "learn\\\\.microsoft\\\\.com"\n';
+  y += "  exclude:\n";
+  y += "    url_regex:\n";
+  y += "      - release-notes\n\n";
+  y += "rules:\n";
+  y += "  - id: EXAMPLE_OUTDATED\n";
+  y += '    title: "References outdated pattern"\n';
+  y += "    severity: P0\n";
+  y += "    match:\n";
+  y += "      any_regex:\n";
+  y += '        - "(?i)REPLACE_WITH_OUTDATED_PATTERN"\n';
+  y += "    unless:\n";
+  y += "      any_regex: []\n";
   return y;
 }
 
 export function generateStrategyYaml(d: ScenarioFormData): string {
-  let y = `# Strategy for ${d.scenarioName}\n`;
-  y += "strategies:\n";
-  y += "  - name: default\n";
-  y += "    description: Default detection strategy\n";
-  if (d.keyFacts.length) {
-    y += "    key_facts:\n";
-    y += yamlList(d.keyFacts, "      ");
+  let y = `# Classification strategy for ${d.scenarioName}\n\n`;
+  y += "meta:\n";
+  y += `  name: ${quoteYaml(d.scenarioName)}\n`;
+  y += '  version: "1.0"\n\n';
+  y += "scope:\n";
+  y += "  product_patterns:\n";
+  y += yamlList(d.productPatterns, "    ");
+  if (d.toolPatterns.length) {
+    y += "  tool_patterns:\n";
+    y += yamlList(d.toolPatterns, "    ");
   }
-  y += `    enable_llm: ${d.enableLlm}\n`;
+  y += "\nhard_exclusions:\n";
+  y += "  url_regex: []\n";
+  y += "  repo_regex: []\n";
+  y += "\nclassification:\n";
+  y += "  default_confidence:\n";
+  y += "    p0_outdated: high\n";
+  y += "    needs_clarification: medium\n";
+  y += "    up_to_date: medium\n";
+  y += "    excluded: high\n";
+  y += "\ntopic_rules: []\n";
+  y += "# Add topic rules to classify findings into specific areas.\n";
+  y += "# See scenarios/copilot-vs/strategy.yaml for examples.\n";
   return y;
 }
 
 // ── helpers ─────────────────────────────────────────────────────────────────
+
+/** Generate a default Jinja2 prompt template for LLM detection. */
+function generatePromptTemplate(): string {
+  return `You are a documentation freshness reviewer for Microsoft Learn.
+You are reviewing articles about {{ product_name }}{% if tool_name %} used with {{ tool_name }}{% endif %}.
+
+IMPORTANT RULES:
+- Only flag ACTUAL CONFLICTS where the article explicitly states something wrong.
+- Do NOT flag an article for "not mentioning" something. Absence is not a conflict.
+- Be conservative: if you're unsure, do NOT flag it.
+
+KNOWN FACTS (from latest release notes and product documentation):
+
+{% for fact in key_facts %}- {{ fact }}
+{% endfor %}
+
+ARTICLE UNDER REVIEW:
+URL: {{ article_url }}
+
+---
+{{ article_text }}
+---
+
+TASK:
+Find statements in the article that EXPLICITLY CONTRADICT the known facts above.
+Only report issues where the article ACTIVELY SAYS something incorrect.
+
+For each real conflict, return a JSON object with these fields:
+- "severity": "P0" for broken instructions (user will fail if they follow these), "P1" for stale versions/features (misleading but not broken), "INFO" for minor staleness (cosmetic or low-impact)
+- "rule_id": "LLM.conflict"
+- "title": A short title describing the conflict (max 80 chars)
+- "conflict": A 1-2 sentence description of what's wrong
+- "article_quote": The EXACT conflicting text from the article (max 200 chars, must be a real quote from the article above)
+- "fact": The correct fact from the KNOWN FACTS list
+
+If there are NO real conflicts, return an empty JSON array: []
+
+Respond ONLY with a valid JSON array. No explanation, no markdown fencing.
+`;
+}
 
 function getNonce(): string {
   const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
