@@ -1,16 +1,10 @@
-# Copilot VS Install Path — Scenario Configuration
-# Detects outdated GitHub Copilot install instructions in Visual Studio docs.
-# Migrated from squad-signal-project to the generic capacitor pipeline.
-
-name: "Copilot VS Install Path"
+name: Copilot VS Install Path
 description: >
-  Find Microsoft Learn articles that still reference the old Marketplace/Manage Extensions
-  install path for GitHub Copilot in Visual Studio, which is now built-in since VS 2022 17.10+.
-
+  Find Microsoft Learn articles that still reference the old Marketplace/Manage Extensions install path for GitHub
+  Copilot in Visual Studio, which is now built-in since VS 2022 17.10+.
 product:
-  name: "GitHub Copilot"
-  tool: "Visual Studio"
-
+  name: GitHub Copilot
+  tool: Visual Studio
 search:
   github:
     orgs:
@@ -20,41 +14,40 @@ search:
       - mspnp
     queries:
       - '"Manage Extensions" copilot "Visual Studio"'
-      - 'marketplace.visualstudio.com copilot "Visual Studio"'
+      - marketplace.visualstudio.com copilot "Visual Studio"
+      - '"Tools" "Extensions" copilot "Visual Studio"'
       - '"install copilot" "Visual Studio"'
       - '"GitHub Copilot" extension "Visual Studio"'
+      - '"GitHub Copilot" "Visual Studio" install'
+      - '"GitHub Copilot" "agent mode" "Visual Studio"'
     excluded_repos:
       - MicrosoftDocs/visualstudio-docs
       - MicrosoftDocs/visualstudio-docs-pr
       - MicrosoftDocs/visualstudio-docs-archive-pr
     tracker: tracker.json
-
   learn:
-    api_url: "https://learn.microsoft.com/api/search"
+    api_url: https://learn.microsoft.com/api/search
     queries:
-      - "GitHub Copilot Visual Studio"
-      - "GitHub Copilot install Visual Studio"
-      - "Copilot extension marketplace Visual Studio"
-
-    # path_scopes limit Learn search to specific doc areas.
-    # Each query is run once per scope (3 queries × 8 scopes = 24 searches).
-    # Scopes match the URL path prefix on learn.microsoft.com, e.g.
-    #   "/en-us/visualstudio/" → only results under learn.microsoft.com/en-us/visualstudio/...
-    # An empty string "" means "no scope filter" (search all of Learn).
+      - GitHub Copilot Visual Studio
+      - GitHub Copilot install Visual Studio
+      - Copilot agent mode Visual Studio
+      - Copilot extension marketplace Visual Studio
+      - GitHub Copilot chat Visual Studio
+      - Copilot code completions Visual Studio
+      - extension copilot Visual Studio
     path_scopes:
-      - "/en-us/visualstudio/"
-      - "/en-us/azure/devops/"
-      - "/en-us/dotnet/"
-      - "/en-us/azure/developer/"
-      - "/en-us/copilot/"
-      - "/en-us/training/modules/"
-      - "/en-us/windows/dev-environment/"
-      - ""
+      - /en-us/visualstudio/
+      - /en-us/azure/devops/
+      - /en-us/dotnet/
+      - /en-us/azure/developer/
+      - /en-us/copilot/
+      - /en-us/training/modules/
+      - /en-us/windows/dev-environment/
+      - ''
     exclude_url_patterns:
       - visual-studio-code
       - vs-code
       - vscode
-
 url_filters:
   relevant:
     - /training/modules/
@@ -85,40 +78,37 @@ url_filters:
     - /office365/
     - /release-notes/
     - copilot-for-azure
-
+    - /mcp-server/
 detection:
   regex_rules: rules.yaml
   llm:
     prompt_template: prompts/detect.md.j2
     key_facts:
-      - "GitHub Copilot is built into Visual Studio 2022 version 17.10 and later — no extension install needed."
-      - "The Manage Extensions dialog is NOT the correct install path for Copilot in VS 2022 17.10+."
-      - "For VS 2022 versions before 17.10, users DO still need to install the extension via Manage Extensions."
-      - "The Visual Studio Marketplace page for Copilot should not be cited as the install source for 17.10+."
-      - "Copilot features appear in the Edit menu or via Ctrl+/ in Visual Studio 2022 17.10+."
-      - "Copilot Free plan is available — no paid subscription required to start."
-      - "Visual Studio Installer is the correct install path for Copilot components."
-      - "EXCEPTION: GitHub Copilot for Azure (a separate extension) IS still installed via the marketplace — this is NOT the same as GitHub Copilot itself."
+      - GitHub Copilot is built into Visual Studio 2022 version 17.10 and later — no extension install needed.
+      - The Manage Extensions dialog is NOT the correct install path for Copilot in VS 2022 17.10+.
+      - For VS 2022 versions before 17.10, users DO still need to install the extension via Manage Extensions.
+      - The Visual Studio Marketplace page for Copilot should not be cited as the install source for 17.10+.
+      - Copilot features appear in the Edit menu or via Ctrl+/ in Visual Studio 2022 17.10+.
+      - Copilot Free plan is available — no paid subscription required to start.
+      - Visual Studio Installer is the correct install path for Copilot components.
+      - "EXCEPTION: GitHub Copilot for Azure is a separate extension that IS still installed via the marketplace."
       - "Articles about 'Copilot for Azure' or the Azure extension are NOT outdated when they reference marketplace install."
     max_article_chars: 8000
     rate_limit_rpm: 10
-
 classification:
   strategy: strategy.yaml
   scope:
     product_patterns:
-      - 'github\s+copilot'
-      - '\bcopilot\b'
+      - github\s+copilot
+      - \bcopilot\b
     tool_patterns:
-      - 'visual\s+studio\b(?!\s*code)'
-
+      - visual\s+studio\b(?!\s*code)
 release_notes:
-  url: "https://learn.microsoft.com/en-us/visualstudio/releases/2026/release-notes"
-  section_pattern: '\bcopilot\b'
-  section_key: "product_sections"
-
+  url: https://learn.microsoft.com/en-us/visualstudio/releases/2026/release-notes
+  section_pattern: \bcopilot\b
+  section_key: product_sections
 reporting:
-  title: "Copilot VS — Documentation Freshness Report"
+  title: Copilot VS — Documentation Freshness Report
   formats:
     - markdown
     - csv

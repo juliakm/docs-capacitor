@@ -73,8 +73,22 @@ export class ScenarioProvider implements vscode.TreeDataProvider<ScenarioTreeIte
 
   private scenarios: ScenarioItem[] = [];
 
+  private disposables: vscode.Disposable[] = [];
+
   constructor() {
     this.discoverScenarios();
+    // Auto-refresh when scenarioPaths setting changes
+    this.disposables.push(
+      vscode.workspace.onDidChangeConfiguration((e) => {
+        if (e.affectsConfiguration("docs-capacitor.scenarioPaths")) {
+          this.refresh();
+        }
+      })
+    );
+  }
+
+  dispose(): void {
+    this.disposables.forEach((d) => d.dispose());
   }
 
   refresh(): void {
