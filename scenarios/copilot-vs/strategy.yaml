@@ -23,10 +23,16 @@ hard_exclusions:
     - '/copilot/microsoft-365/'
     - '/microsoft-copilot-studio/'
     - 'copilot-for-azure'
+    - 'github-copilot-azure'
     - '/azure/copilot/'
-    - '/mcp-server/'
-    - '\bmcp\b'
     - 'security-copilot'
+    # Pages not about Copilot in Visual Studio IDE
+    - '/ssms/'
+    - '/troubleshoot/'
+    - '/porting/github-copilot-app-modernization/'
+    - 'learn\.microsoft\.com/en-us/visualstudio/$'
+    - '/visualstudio/windows/$'
+    - '/signing-in-to-visual-studio'
   repo_regex: []
 
 classification:
@@ -46,13 +52,15 @@ topic_rules:
         - '(?i)copilot.*included'
         - '(?i)no\s+longer.*extension'
     page_topic_signals:
-      # Must specifically discuss installing Copilot — not just mention "extension"
+      # Must specifically discuss the old install METHOD — not just mention "install" casually
       any_regex:
-        - '(?i)install.*github\s+copilot'
-        - '(?i)github\s+copilot.*install'
         - '(?i)manage\s+extensions.*copilot'
         - '(?i)copilot.*manage\s+extensions'
         - '(?i)marketplace\.visualstudio\.com.*copilot'
+        - '(?i)install\s+the\s+(github\s+)?copilot\s+extension'
+        - '(?i)copilot\s+extension.*install'
+        - '(?i)extensions?\s+(and\s+updates|dialog).*copilot'
+        - '(?i)tools\s*>\s*extensions.*copilot'
     stale_signals:
       any_regex:
         - '(?i)manage\s+extensions.*copilot'
@@ -75,8 +83,74 @@ topic_rules:
         - '(?i)17\.\d+.*built.?in'
         - '(?i)included.*by\s+default'
         - '(?i)no.*extension.*required'
+        - '(?i)18\.\d+.*copilot'
+        - '(?i)copilot.*18\.\d+'
+        - '(?i)visual\s+studio\s+(installer|setup).*copilot'
+        - '(?i)install\s+copilot.*badge'
+        - '(?i)install\s+copilot.*dropdown'
     narrative_instructions:
       - "The install-path topic checks for articles that still direct users to Manage Extensions or the VS Marketplace."
       - "Since VS 2022 17.10, Copilot is built-in. Articles should reflect this."
       - "Exception: 'Copilot for Azure' is a SEPARATE extension that IS still installed via the marketplace."
       - "Exception: VS Code still uses marketplace/extension install — only Visual Studio (non-Code) is affected."
+
+  - id: copilot-features
+    title: "Copilot Features & Getting Started"
+    area: features
+    release_signals:
+      # Matches the "GitHub Copilot" heading in release notes and feature descriptions
+      any_regex:
+        - '(?i)copilot.*completions?'
+        - '(?i)copilot.*chat'
+        - '(?i)copilot.*agent'
+        - '(?i)copilot.*free'
+        - '(?i)next\s+edit\s+suggest'
+        - '(?i)\bNES\b'
+        - '(?i)\bMCP\b.*copilot'
+    page_topic_signals:
+      # Pages about using Copilot features, getting started, or general Copilot docs
+      any_regex:
+        - '(?i)copilot.*completions?'
+        - '(?i)copilot.*chat'
+        - '(?i)copilot.*agent\s+mode'
+        - '(?i)copilot\s+free'
+        - '(?i)get\s+started.*copilot'
+        - '(?i)copilot.*get\s+started'
+        - '(?i)copilot.*prerequisites'
+        - '(?i)using\s+(github\s+)?copilot'
+        - '(?i)copilot.*features?'
+        - '(?i)next\s+edit\s+suggest'
+        - '(?i)mcp.*copilot|copilot.*mcp'
+        - '(?i)copilot.*code\s+suggest'
+        - '(?i)ai.assisted.*development'
+        - '(?i)copilot.*test'
+        - '(?i)copilot.*context'
+        - '(?i)prompt.*copilot|copilot.*prompt'
+    stale_signals:
+      # Only flag genuinely stale Copilot-specific references
+      any_regex:
+        - '(?i)copilot\s+labs'
+        - '(?i)copilot\s+technical\s+preview'
+        - '(?i)copilot.*preview\s+feature'
+        - '(?i)visual\s+studio\s+2019.*copilot'
+    stale_exceptions:
+      any_regex:
+        - '(?i)17\.[0-7].*or\s+(later|newer|above)'
+    current_signals:
+      # Pages referencing current VS versions or current Copilot features
+      any_regex:
+        - '(?i)version\s+17\.(8|9|1[0-9])\b'
+        - '(?i)17\.(8|9|1[0-9]).*or\s+(later|newer|above)'
+        - '(?i)visual\s+studio\s+202[2-9].*17\.(8|9|1[0-9])'
+        - '(?i)18\.\d+'
+        - '(?i)visual\s+studio\s+2026'
+        - '(?i)copilot\s+free\s+(plan|tier|status)'
+        - '(?i)agent\s+mode'
+        - '(?i)next\s+edit\s+suggest'
+        - '(?i)\bNES\b'
+        - '(?i)copilot\s+badge'
+        - '(?i)copilot.*edits\b'
+        - '(?i)mcp\s+server'
+    narrative_instructions:
+      - "The copilot-features topic validates that pages about Copilot features reference current VS versions and feature names."
+      - "Pages mentioning VS 17.8+ or 18.x are current. Pages requiring VS 2019 or 17.0-17.7 may be stale."
