@@ -92,7 +92,7 @@ def filter_strategy_by_areas(strategy: Dict[str, Any], selected_areas: List[str]
 
 
 def compile_patterns(patterns: Iterable[str]) -> List[re.Pattern]:
-    return [re.compile(p) for p in patterns]
+    return [re.compile(p, re.IGNORECASE) for p in patterns]
 
 
 def any_match(patterns: List[re.Pattern], text: str) -> Optional[re.Match]:
