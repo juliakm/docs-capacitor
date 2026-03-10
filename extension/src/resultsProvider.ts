@@ -101,14 +101,17 @@ export class ResultItem extends vscode.TreeItem {
 
 // ── Reviewed state persistence ───────────────────────────────────────
 
-function reviewedFilePath(): string | undefined {
+function reviewedFilePath(scenario?: string): string | undefined {
   const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
   if (!root) { return undefined; }
+  if (scenario) {
+    return path.join(root, "output", scenario, ".capacitor-reviewed.json");
+  }
   return path.join(root, "output", ".capacitor-reviewed.json");
 }
 
-function loadReviewed(): Set<string> {
-  const fp = reviewedFilePath();
+function loadReviewed(scenario?: string): Set<string> {
+  const fp = reviewedFilePath(scenario);
   if (!fp || !fs.existsSync(fp)) { return new Set(); }
   try {
     const data: unknown = JSON.parse(fs.readFileSync(fp, "utf-8"));
@@ -117,8 +120,8 @@ function loadReviewed(): Set<string> {
   return new Set();
 }
 
-function saveReviewed(urls: Set<string>): void {
-  const fp = reviewedFilePath();
+function saveReviewed(urls: Set<string>, scenario?: string): void {
+  const fp = reviewedFilePath(scenario);
   if (!fp) { return; }
   const dir = path.dirname(fp);
   if (!fs.existsSync(dir)) { fs.mkdirSync(dir, { recursive: true }); }
@@ -139,6 +142,8 @@ export class ResultsProvider implements vscode.TreeDataProvider<ResultItem> {
   private reviewed: Set<string> = new Set();
   private activeFilter: string | undefined;
   private treeView: vscode.TreeView<ResultItem> | undefined;
+  /** The scenario whose results are currently displayed. */
+  private activeScenario: string | undefined;
 
   constructor() {
     this.loadResults();
@@ -150,11 +155,44 @@ export class ResultsProvider implements vscode.TreeDataProvider<ResultItem> {
     this.updateSummaryMessage();
   }
 
+  /** Load results for a specific scenario and refresh the tree. */
+  loadScenario(scenarioName: string): void {
+    this.activeScenario = scenarioName;
+    this.loadResults();
+    this._onDidChangeTreeData.fire();
+    this.updateSummaryMessage();
+  }
+
   /** Reload data from disk and refresh the tree. */
   refresh(): void {
     this.loadResults();
     this._onDidChangeTreeData.fire();
     this.updateSummaryMessage();
+  }
+
+  /** Get the name of the currently loaded scenario (if any). */
+  getActiveScenario(): string | undefined {
+    return this.activeScenario;
+  }
+
+  /** Return all scenario names that have results in the output directory. */
+  getAvailableScenarios(): string[] {
+    const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+    if (!workspaceRoot) { return []; }
+    const outputDir = path.join(workspaceRoot, "output");
+    if (!fs.existsSync(outputDir)) { return []; }
+    const scenarios: string[] = [];
+    try {
+      for (const entry of fs.readdirSync(outputDir, { withFileTypes: true })) {
+        if (entry.isDirectory()) {
+          const jsonPath = path.join(outputDir, entry.name, "classifications.json");
+          if (fs.existsSync(jsonPath)) {
+            scenarios.push(entry.name);
+          }
+        }
+      }
+    } catch { /* ignore */ }
+    return scenarios;
   }
 
   /** Set a classification filter (undefined = show all). */
@@ -167,7 +205,7 @@ export class ResultsProvider implements vscode.TreeDataProvider<ResultItem> {
   /** Mark a URL as reviewed and persist. */
   markReviewed(url: string): void {
     this.reviewed.add(url);
-    saveReviewed(this.reviewed);
+    saveReviewed(this.reviewed, this.activeScenario);
     this._onDidChangeTreeData.fire();
   }
 
@@ -357,8 +395,9 @@ export class ResultsProvider implements vscode.TreeDataProvider<ResultItem> {
     if (needsReview > 0) { parts.push(`${needsReview} needs review`); }
     if (upToDate > 0) { parts.push(`${upToDate} up to date`); }
     if (parts.length === 0) { parts.push(`${all.length} results`); }
+    const scenarioNote = this.activeScenario ? ` [${this.activeScenario}]` : "";
     const filterNote = this.activeFilter ? ` (filtered: ${this.activeFilter})` : "";
-    this.treeView.message = parts.join(", ") + filterNote;
+    this.treeView.message = parts.join(", ") + scenarioNote + filterNote;
   }
 
   // ── Helpers ────────────────────────────────────────────────────────
@@ -369,7 +408,7 @@ export class ResultsProvider implements vscode.TreeDataProvider<ResultItem> {
   }
 
   private loadResults(): void {
-    this.reviewed = loadReviewed();
+    this.reviewed = loadReviewed(this.activeScenario);
 
     const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
     if (!workspaceRoot) {
@@ -377,9 +416,25 @@ export class ResultsProvider implements vscode.TreeDataProvider<ResultItem> {
       return;
     }
 
-    // Prefer classifications.json — check output/ and output/*/ subdirectories
     const outputDir = path.join(workspaceRoot, "output");
-    const jsonCandidates = [path.join(outputDir, "classifications.json")];
+
+    // If a specific scenario is selected, load its results directly
+    if (this.activeScenario) {
+      const scenarioJson = path.join(outputDir, this.activeScenario, "classifications.json");
+      if (fs.existsSync(scenarioJson)) {
+        if (this.loadFromJson(scenarioJson)) { return; }
+      }
+      // Fallback to CSV in scenario dir
+      const scenarioCsv = path.join(outputDir, this.activeScenario, "report.csv");
+      if (fs.existsSync(scenarioCsv)) {
+        if (this.loadFromCsv(scenarioCsv)) { return; }
+      }
+    }
+
+    // No active scenario — find the most recent results across all scenario subdirs
+    const jsonCandidates: string[] = [];
+    // Legacy: top-level output/classifications.json
+    jsonCandidates.push(path.join(outputDir, "classifications.json"));
     if (fs.existsSync(outputDir)) {
       try {
         for (const entry of fs.readdirSync(outputDir, { withFileTypes: true })) {
@@ -404,67 +459,78 @@ export class ResultsProvider implements vscode.TreeDataProvider<ResultItem> {
     }
 
     if (jsonPath) {
-      try {
-        const raw = fs.readFileSync(jsonPath, "utf-8");
-        const data: unknown = JSON.parse(raw);
-        if (Array.isArray(data)) {
-          this.results = data.map((item: Record<string, unknown>) => ({
-            url: String(item["url"] ?? ""),
-            title: item["title"] != null ? String(item["title"]) : undefined,
-            classification: String(item["classification"] ?? "unknown"),
-            confidence: item["confidence"] != null ? (typeof item["confidence"] === "string" ? String(item["confidence"]) : Number(item["confidence"])) : 0,
-            topic: item["topic"] != null ? String(item["topic"]) : undefined,
-            reason: item["reason"] != null ? String(item["reason"]) : undefined,
-            suggested_fix: item["suggested_fix"] != null ? String(item["suggested_fix"]) : undefined,
-            evidence: item["evidence"] != null ? String(item["evidence"]) : undefined,
-            regex_evidence: item["regex_evidence"] != null ? String(item["regex_evidence"]) : undefined,
-            regex_signals: Array.isArray(item["regex_signals"])
-              ? (item["regex_signals"] as unknown[]).map(String)
-              : undefined,
-            regex_signal: item["regex_signal"] != null ? String(item["regex_signal"]) : undefined,
-            release_conflict_section: item["release_conflict_section"] != null ? String(item["release_conflict_section"]) : undefined,
-            agrees_with_regex: item["agrees_with_regex"] != null ? Boolean(item["agrees_with_regex"]) : undefined,
-            repo: item["repo"] != null ? String(item["repo"]) : undefined,
-            llm_findings: Array.isArray(item["llm_findings"])
-              ? (item["llm_findings"] as Array<Record<string, unknown>>).map((f) => ({
-                  title: f["title"] != null ? String(f["title"]) : undefined,
-                  conflict: f["conflict"] != null ? String(f["conflict"]) : undefined,
-                  article_quote: f["article_quote"] != null ? String(f["article_quote"]) : undefined,
-                  fact: f["fact"] != null ? String(f["fact"]) : undefined,
-                  severity: f["severity"] != null ? String(f["severity"]) : undefined,
-                }))
-              : undefined,
-          }));
-        }
-        return;
-      } catch {
-        // fall through to CSV
+      // Infer the active scenario from the path
+      const parent = path.basename(path.dirname(jsonPath));
+      if (parent !== "output") {
+        this.activeScenario = parent;
       }
+      if (this.loadFromJson(jsonPath)) { return; }
     }
 
-    // Fallback: report.csv
-    const csvPath = path.join(workspaceRoot, "output", "report.csv");
+    // Fallback: legacy report.csv
+    const csvPath = path.join(outputDir, "report.csv");
     if (fs.existsSync(csvPath)) {
-      try {
-        const lines = fs.readFileSync(csvPath, "utf-8").split("\n").filter(Boolean);
-        const header = lines[0].split(",");
-        const urlIdx = header.indexOf("url");
-        const classIdx = header.indexOf("classification");
-        const confIdx = header.indexOf("confidence");
-        this.results = lines.slice(1).map((line) => {
-          const cols = line.split(",");
-          return {
-            url: cols[urlIdx] ?? "",
-            classification: cols[classIdx] ?? "unknown",
-            confidence: Number(cols[confIdx] ?? 0),
-          };
-        });
-        return;
-      } catch {
-        // ignore
-      }
+      if (this.loadFromCsv(csvPath)) { return; }
     }
 
     this.results = [];
+  }
+
+  private loadFromJson(jsonPath: string): boolean {
+    try {
+      const raw = fs.readFileSync(jsonPath, "utf-8");
+      const data: unknown = JSON.parse(raw);
+      if (Array.isArray(data)) {
+        this.results = data.map((item: Record<string, unknown>) => ({
+          url: String(item["url"] ?? ""),
+          title: item["title"] != null ? String(item["title"]) : undefined,
+          classification: String(item["classification"] ?? "unknown"),
+          confidence: item["confidence"] != null ? (typeof item["confidence"] === "string" ? String(item["confidence"]) : Number(item["confidence"])) : 0,
+          topic: item["topic"] != null ? String(item["topic"]) : undefined,
+          reason: item["reason"] != null ? String(item["reason"]) : undefined,
+          suggested_fix: item["suggested_fix"] != null ? String(item["suggested_fix"]) : undefined,
+          evidence: item["evidence"] != null ? String(item["evidence"]) : undefined,
+          regex_evidence: item["regex_evidence"] != null ? String(item["regex_evidence"]) : undefined,
+          regex_signals: Array.isArray(item["regex_signals"])
+            ? (item["regex_signals"] as unknown[]).map(String)
+            : undefined,
+          regex_signal: item["regex_signal"] != null ? String(item["regex_signal"]) : undefined,
+          release_conflict_section: item["release_conflict_section"] != null ? String(item["release_conflict_section"]) : undefined,
+          agrees_with_regex: item["agrees_with_regex"] != null ? Boolean(item["agrees_with_regex"]) : undefined,
+          repo: item["repo"] != null ? String(item["repo"]) : undefined,
+          llm_findings: Array.isArray(item["llm_findings"])
+            ? (item["llm_findings"] as Array<Record<string, unknown>>).map((f) => ({
+                title: f["title"] != null ? String(f["title"]) : undefined,
+                conflict: f["conflict"] != null ? String(f["conflict"]) : undefined,
+                article_quote: f["article_quote"] != null ? String(f["article_quote"]) : undefined,
+                fact: f["fact"] != null ? String(f["fact"]) : undefined,
+                severity: f["severity"] != null ? String(f["severity"]) : undefined,
+              }))
+            : undefined,
+        }));
+        return true;
+      }
+    } catch { /* fall through */ }
+    return false;
+  }
+
+  private loadFromCsv(csvPath: string): boolean {
+    try {
+      const lines = fs.readFileSync(csvPath, "utf-8").split("\n").filter(Boolean);
+      const header = lines[0].split(",");
+      const urlIdx = header.indexOf("url");
+      const classIdx = header.indexOf("classification");
+      const confIdx = header.indexOf("confidence");
+      this.results = lines.slice(1).map((line) => {
+        const cols = line.split(",");
+        return {
+          url: cols[urlIdx] ?? "",
+          classification: cols[classIdx] ?? "unknown",
+          confidence: Number(cols[confIdx] ?? 0),
+        };
+      });
+      return true;
+    } catch { /* ignore */ }
+    return false;
   }
 }

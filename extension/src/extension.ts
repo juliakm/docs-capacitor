@@ -313,6 +313,29 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
   );
 
+  // --- Switch Results Scenario ---
+  context.subscriptions.push(
+    vscode.commands.registerCommand("docs-capacitor.switchResults", async () => {
+      const scenarios = resultsProvider.getAvailableScenarios();
+      if (scenarios.length === 0) {
+        vscode.window.showInformationMessage("No results found. Run a freshness check first.");
+        return;
+      }
+      const active = resultsProvider.getActiveScenario();
+      const items = scenarios.map((s) => ({
+        label: s === active ? `$(check) ${s}` : s,
+        description: s === active ? "currently viewing" : undefined,
+        scenario: s,
+      }));
+      const picked = await vscode.window.showQuickPick(items, {
+        placeHolder: "Select a scenario to view results for",
+      });
+      if (picked) {
+        resultsProvider.loadScenario(picked.scenario);
+      }
+    }),
+  );
+
   // --- Run Freshness Check ---
   context.subscriptions.push(
     vscode.commands.registerCommand("docs-capacitor.check", async (scenarioPathArg?: string) => {
@@ -327,7 +350,8 @@ export function activate(context: vscode.ExtensionContext): void {
       statusBarItem.backgroundColor = new vscode.ThemeColor("statusBarItem.warningBackground");
 
       const cwd = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? process.cwd();
-      const outputDir = path.join(cwd, "output");
+      const scenarioName = path.basename(path.dirname(scenarioPath));
+      const outputDir = path.join(cwd, "output", scenarioName);
       const runner = createRunner();
       const result = await runner.runCheck(scenarioPath, outputDir, { timeoutMs: getTimeoutMs() });
 
@@ -336,9 +360,9 @@ export function activate(context: vscode.ExtensionContext): void {
       if (result.success) {
         const now = new Date().toLocaleTimeString();
         statusBarItem.text = `$(beaker) Capacitor ✓ ${now}`;
-        statusBarItem.tooltip = `Last check: ${now}`;
-        vscode.window.showInformationMessage("✅ Freshness check complete — see Results panel.");
-        resultsProvider.refresh();
+        statusBarItem.tooltip = `Last check: ${scenarioName} at ${now}`;
+        vscode.window.showInformationMessage(`✅ Freshness check complete for ${scenarioName} — see Results panel.`);
+        resultsProvider.loadScenario(scenarioName);
       } else {
         statusBarItem.text = "$(beaker) Capacitor ✗ Failed";
         statusBarItem.tooltip = "Last check failed — click to retry";

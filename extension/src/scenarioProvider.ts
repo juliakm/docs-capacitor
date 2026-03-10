@@ -139,8 +139,8 @@ export class ScenarioProvider implements vscode.TreeDataProvider<ScenarioTreeIte
     }
 
     // 3. Search additional configured paths
-    const extraPaths = vscode.workspace.getConfiguration("docs-capacitor")
-      .get<string[]>("scenarioPaths", []);
+    const config = vscode.workspace.getConfiguration("docs-capacitor");
+    const extraPaths = config.get<string[]>("scenarioPaths", []);
     const wsRoot = roots[0]?.uri.fsPath;
     for (const extra of extraPaths) {
       const resolved = path.isAbsolute(extra) ? extra : wsRoot ? path.join(wsRoot, extra) : extra;

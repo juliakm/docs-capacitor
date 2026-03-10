@@ -132,6 +132,12 @@
         "icon": "$(refresh)"
       },
       {
+        "command": "docs-capacitor.switchResults",
+        "title": "Switch Results Scenario",
+        "category": "Docs Capacitor",
+        "icon": "$(list-tree)"
+      },
+      {
         "command": "docs-capacitor.fixWithCopilot",
         "title": "Fix with Copilot",
         "category": "Docs Capacitor",
@@ -251,6 +257,11 @@
           "command": "docs-capacitor.refreshResults",
           "when": "view == docsCapacitorResults",
           "group": "navigation@4"
+        },
+        {
+          "command": "docs-capacitor.switchResults",
+          "when": "view == docsCapacitorResults",
+          "group": "navigation@5"
         }
       ]
     },

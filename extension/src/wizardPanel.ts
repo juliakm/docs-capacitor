@@ -720,6 +720,12 @@ function yamlList(items: string[], indent: string): string {
 }
 
 function quoteYaml(s: string): string {
+  // If the string contains backslashes (e.g. regex patterns), use single quotes
+  // where backslashes are literal. In YAML double-quoted strings, backslashes
+  // are escape characters which breaks regex patterns.
+  if (s.includes("\\")) {
+    return `'${s.replace(/'/g, "''")}'`;
+  }
   if (/[:#{}[\],&*?|>!'"%@]/.test(s) || /^\s|\s$/.test(s)) {
     return `"${s.replace(/"/g, '\\"')}"`;
   }
