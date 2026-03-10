@@ -240,7 +240,8 @@ def classify_page(
         confidence = confidence_cfg.get("excluded", "high")
     else:
         product_hit = any_match(product_patterns, lowered_text)
-        tool_hit = any_match(tool_patterns, lowered_text)
+        # When no tool patterns are configured, treat tool as always matching
+        tool_hit = any_match(tool_patterns, lowered_text) if tool_patterns else True
 
         if not (product_hit and tool_hit):
             classification = "EXCLUDED"
@@ -375,8 +376,8 @@ class TopicRulesClassifier(BaseClassifier):
         pages: List[Dict[str, Any]],
         **kwargs: Any,
     ) -> List[Dict[str, Any]]:
-        if self.strategy_path is None or self.release_notes_path is None:
-            raise ValueError("strategy_path and release_notes_path are required")
+        if self.strategy_path is None:
+            raise ValueError("strategy_path is required")
 
         strategy = load_strategy(self.strategy_path)
         strategy = filter_strategy_by_areas(strategy, self.areas)
@@ -384,9 +385,15 @@ class TopicRulesClassifier(BaseClassifier):
         if not strategy.get("topic_rules"):
             selected = ", ".join(self.areas) if self.areas else "(none)"
             print(f"No topic rules available for selected area(s): {selected}")
-            return []
+            print("  Classifying based on regex findings and scope patterns only.")
+            # Fall through — classify_page handles the no-topic-rules case
+            # by using regex signals as the basis for classification
 
-        release_notes = json.loads(self.release_notes_path.read_text(encoding="utf-8"))
+        release_notes_path = self.release_notes_path
+        if release_notes_path and release_notes_path.exists():
+            release_notes = json.loads(release_notes_path.read_text(encoding="utf-8"))
+        else:
+            release_notes = {}
         grouped = aggregate_findings(findings)
         page_index = build_page_index(pages)
 

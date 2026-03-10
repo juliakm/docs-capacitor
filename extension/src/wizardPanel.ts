@@ -397,8 +397,8 @@ export class ScenarioWizardPanel {
     <label for="fmtCsv" style="margin:0;font-weight:normal">CSV</label>
   </div>
   <div class="checkbox-row">
-    <input type="checkbox" id="fmtJson" />
-    <label for="fmtJson" style="margin:0;font-weight:normal">JSON</label>
+    <input type="checkbox" id="fmtJson" checked />
+    <label for="fmtJson" style="margin:0;font-weight:normal">JSON (required for VS Code extension results)</label>
   </div>
 </div>
 

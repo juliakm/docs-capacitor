@@ -101,7 +101,7 @@ SCENARIO_SCHEMA: Dict[str, Any] = {
             "type": "object",
             "properties": {
                 "title": {"type": "string"},
-                "formats": {"type": "array", "items": {"type": "string", "enum": ["markdown", "csv"]}},
+                "formats": {"type": "array", "items": {"type": "string", "enum": ["markdown", "csv", "json"]}},
             },
         },
     },
