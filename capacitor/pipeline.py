@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 from urllib.parse import urldefrag
@@ -17,6 +18,23 @@ from capacitor.detectors import DETECTOR_REGISTRY
 from capacitor.classifiers import CLASSIFIER_REGISTRY
 from capacitor.reporters import REPORTER_REGISTRY
 from capacitor.utils.release_notes import build_snapshot, fetch_page, extract_sections
+
+
+def _get_github_token() -> str:
+    """Get GitHub token from env or fall back to ``gh auth token``."""
+    token = os.getenv("GITHUB_TOKEN", "")
+    if token:
+        return token
+    try:
+        result = subprocess.run(
+            ["gh", "auth", "token"],
+            capture_output=True, text=True, timeout=5,
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            return result.stdout.strip()
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        pass
+    return ""
 
 
 class Pipeline:
@@ -100,7 +118,7 @@ class Pipeline:
 
         return cls(
             provider=os.getenv("LLM_PROVIDER", ""),
-            github_token=os.getenv("GITHUB_TOKEN", ""),
+            github_token=_get_github_token(),
             model=os.getenv("GITHUB_MODELS_MODEL", "gpt-4o"),
             endpoint=os.getenv("AZURE_OPENAI_ENDPOINT", ""),
             api_key=os.getenv("AZURE_OPENAI_API_KEY", ""),

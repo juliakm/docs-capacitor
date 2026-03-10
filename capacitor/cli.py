@@ -280,7 +280,16 @@ def validate(scenario: str) -> None:
     elif az_endpoint and az_key:
         _pass("Azure OpenAI env vars set (AZURE_OPENAI_ENDPOINT, AZURE_OPENAI_API_KEY)")
     elif llm_configured:
-        _warn("No LLM credentials found — set GITHUB_TOKEN (preferred) or AZURE_OPENAI_ENDPOINT + AZURE_OPENAI_API_KEY")
+        # Check if gh CLI can provide a token
+        try:
+            import subprocess as _sp
+            _gh_result = _sp.run(["gh", "auth", "token"], capture_output=True, text=True, timeout=5)
+            if _gh_result.returncode == 0 and _gh_result.stdout.strip():
+                _pass("GitHub Models token available via 'gh auth token' (GitHub CLI)")
+            else:
+                _warn("No LLM credentials found — set GITHUB_TOKEN or run 'gh auth login'")
+        except (FileNotFoundError, _sp.TimeoutExpired):
+            _warn("No LLM credentials found — set GITHUB_TOKEN (preferred) or AZURE_OPENAI_ENDPOINT + AZURE_OPENAI_API_KEY")
     else:
         _pass("LLM not needed (no LLM detection configured)")
 

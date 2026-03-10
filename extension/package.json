@@ -1,6 +1,6 @@
 {
   "name": "docs-capacitor",
-  "displayName": "Docs Capacitor \u2014 Documentation Freshness",
+  "displayName": "Docs Capacitor — Documentation Freshness",
   "description": "Detect outdated references in Microsoft Learn documentation",
   "version": "0.1.0",
   "publisher": "microsoft",
@@ -314,5 +314,8 @@
     "@vscode/test-cli": "^0.0.10",
     "esbuild": "^0.20.0",
     "typescript": "^5.3.0"
+  },
+  "dependencies": {
+    "js-yaml": "^4.1.1"
   }
 }
