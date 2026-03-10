@@ -246,7 +246,10 @@ def classify_page(
         if not (product_hit and tool_hit):
             classification = "EXCLUDED"
             reason = "Page is out of scope: does not mention both the product and tool."
-            evidence = [e for e in [extract_evidence(lowered_text, product_hit), extract_evidence(lowered_text, tool_hit)] if e]
+            evidence = [e for e in [
+                extract_evidence(lowered_text, product_hit) if product_hit and product_hit is not True else None,
+                extract_evidence(lowered_text, tool_hit) if tool_hit and tool_hit is not True else None,
+            ] if e]
             suggested_fix = None
             confidence = confidence_cfg.get("excluded", "high")
         else:
@@ -320,7 +323,10 @@ def classify_page(
                     reason = "No explicit stale or current signal was detected for matching release-note topics."
                 else:
                     reason = "No matching release-note topic was detected for this page's guidance."
-                evidence = [e for e in [extract_evidence(lowered_text, product_hit), extract_evidence(lowered_text, tool_hit)] if e]
+                evidence = [e for e in [
+                    extract_evidence(lowered_text, product_hit) if product_hit and product_hit is not True else None,
+                    extract_evidence(lowered_text, tool_hit) if tool_hit and tool_hit is not True else None,
+                ] if e]
                 suggested_fix = "Clarify the guidance with version/topic-specific statements that can be validated."
                 confidence = confidence_cfg.get("needs_clarification", "medium")
 
