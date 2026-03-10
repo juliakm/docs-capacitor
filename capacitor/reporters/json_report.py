@@ -30,8 +30,16 @@ class JSONReporter(BaseReporter):
         json_path = out_dir / "classifications.json"
         out_dir.mkdir(parents=True, exist_ok=True)
 
+        # Only include actionable results — UP_TO_DATE and EXCLUDED are noise
+        ACTIONABLE = {"P0_OUTDATED", "NEEDS_CLARIFICATION"}
+
         output = []
+        skipped = 0
         for row in classifications:
+            classification = row.get("classification", "unknown")
+            if classification not in ACTIONABLE:
+                skipped += 1
+                continue
             # Normalize evidence to a single string
             evidence_raw = row.get("evidence", [])
             if isinstance(evidence_raw, list):
@@ -67,6 +75,8 @@ class JSONReporter(BaseReporter):
             json.dumps(output, indent=2, ensure_ascii=False) + "\n",
             encoding="utf-8",
         )
+        if skipped:
+            print(f"  JSON report: {len(output)} actionable, {skipped} non-actionable omitted")
         return json_path
 
 
