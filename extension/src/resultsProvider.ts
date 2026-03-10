@@ -172,6 +172,22 @@ export class ResultsProvider implements vscode.TreeDataProvider<ResultItem> {
     this.updateSummaryMessage();
   }
 
+  /** Load results directly from a specific file path. */
+  loadFile(filePath: string): void {
+    this.meta = undefined;
+    const parent = path.basename(path.dirname(filePath));
+    this.activeScenario = parent !== "output" ? parent : undefined;
+    const loaded = filePath.endsWith(".json")
+      ? this.loadFromJson(filePath)
+      : this.loadFromCsv(filePath);
+    if (!loaded) {
+      vscode.window.showWarningMessage(`Could not parse results from ${filePath}`);
+      return;
+    }
+    this._onDidChangeTreeData.fire();
+    this.updateSummaryMessage();
+  }
+
   /** Get the name of the currently loaded scenario (if any). */
   getActiveScenario(): string | undefined {
     return this.activeScenario;

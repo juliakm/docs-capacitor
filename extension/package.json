@@ -138,6 +138,12 @@
         "icon": "$(list-tree)"
       },
       {
+        "command": "docs-capacitor.loadResults",
+        "title": "Load Results from File",
+        "category": "Docs Capacitor",
+        "icon": "$(folder-opened)"
+      },
+      {
         "command": "docs-capacitor.fixWithCopilot",
         "title": "Fix with Copilot",
         "category": "Docs Capacitor",

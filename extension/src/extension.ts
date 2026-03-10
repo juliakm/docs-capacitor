@@ -336,6 +336,21 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
   );
 
+  // --- Load Results from File ---
+  context.subscriptions.push(
+    vscode.commands.registerCommand("docs-capacitor.loadResults", async () => {
+      const picked = await vscode.window.showOpenDialog({
+        canSelectFiles: true,
+        canSelectFolders: false,
+        canSelectMany: false,
+        filters: { "JSON / CSV": ["json", "csv"] },
+        title: "Select a classifications.json or report.csv file",
+      });
+      if (!picked || picked.length === 0) { return; }
+      resultsProvider.loadFile(picked[0].fsPath);
+    }),
+  );
+
   // --- Run Freshness Check ---
   context.subscriptions.push(
     vscode.commands.registerCommand("docs-capacitor.check", async (scenarioPathArg?: string) => {
