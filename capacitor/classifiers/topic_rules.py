@@ -317,6 +317,22 @@ def classify_page(
                 evidence = [extract_evidence(lowered_text, matched_current)]
                 suggested_fix = None
                 confidence = confidence_cfg.get("up_to_date", "medium")
+            elif not topic_rules:
+                # No topic rules configured — classify based on regex signal alone
+                rule_names = ", ".join(regex_rule_ids) if regex_rule_ids else "detection rules"
+                if regex_signal == "P0":
+                    classification = "NEEDS_CLARIFICATION"
+                    reason = f"Regex rule {rule_names} flagged this page. Review the matched content for potential issues."
+                    suggested_fix = "Check the regex-matched content and update if outdated."
+                    confidence = confidence_cfg.get("needs_clarification", "medium")
+                else:
+                    classification = "NEEDS_CLARIFICATION"
+                    reason = f"Page is in scope and matched by {rule_names}. Manual review recommended."
+                    suggested_fix = "Review the page content for accuracy."
+                    confidence = confidence_cfg.get("needs_clarification", "low")
+                evidence = [e for e in [
+                    extract_evidence(lowered_text, product_hit) if product_hit and product_hit is not True else None,
+                ] if e]
             else:
                 classification = "NEEDS_CLARIFICATION"
                 if topic_seen_in_notes:
