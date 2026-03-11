@@ -275,8 +275,8 @@ export class ScenarioWizardPanel {
   <p class="hint">Define the product whose documentation you want to check for freshness.</p>
 
   <label for="productName">Product name <span style="color:var(--vscode-errorForeground)">*</span></label>
-  <div class="hint">The product or service whose docs may be outdated.</div>
-  <input type="text" id="productName" placeholder="e.g. Azure Kubernetes Service, GitHub Copilot" />
+  <div class="hint">The product or service whose docs you want to check. This name is used in reports and to label findings — it does <em>not</em> control where we search (that's Step 2).</div>
+  <input type="text" id="productName" placeholder="e.g. Azure Kubernetes Service, GitHub Copilot, Visual Studio" />
   <div class="error" id="productNameError">Product name is required.</div>
 
   <label for="toolName">Tool / IDE name <span class="hint">(optional)</span></label>
@@ -298,7 +298,7 @@ export class ScenarioWizardPanel {
   <p class="hint">Configure where to search for documentation pages to check.</p>
 
   <label for="learnQueries">Microsoft Learn search queries <span style="color:var(--vscode-errorForeground)">*</span></label>
-  <div class="hint">Search terms to find relevant articles on learn.microsoft.com. One per line.</div>
+  <div class="hint">Plain-text search terms (not regex) used to find relevant articles on learn.microsoft.com. One per line. Think of these like what you'd type into the Learn search box.</div>
   <textarea id="learnQueries" rows="3" placeholder="GitHub Copilot Visual Studio&#10;Copilot install getting started&#10;az aks create"></textarea>
   <div class="error" id="learnQueriesError">At least one search query is required.</div>
 
@@ -319,12 +319,12 @@ export class ScenarioWizardPanel {
   <textarea id="githubOrgs" rows="2" placeholder="MicrosoftDocs&#10;Azure"></textarea>
 
   <label for="githubQueries">GitHub search queries</label>
-  <div class="hint">Code search queries to find docs in GitHub. One per line.</div>
+  <div class="hint">Plain-text code search queries to find docs in GitHub repos. One per line. These are passed directly to GitHub's code search.</div>
   <textarea id="githubQueries" rows="3" placeholder='"Manage Extensions" copilot "Visual Studio"&#10;marketplace.visualstudio.com copilot'></textarea>
 
   <details>
     <summary>Excluded repositories (optional)</summary>
-    <div class="hint" style="margin-top:4px">Skip results from these repos (org/repo format). One per line.</div>
+    <div class="hint" style="margin-top:4px">Skip results from these repos (org/repo format). One per line. Archive repos (ending in <code>-archive-pr</code>) are excluded automatically.</div>
     <textarea id="excludedRepos" rows="2" placeholder="MicrosoftDocs/visualstudio-docs-archive-pr"></textarea>
   </details>
 
@@ -343,8 +343,8 @@ export class ScenarioWizardPanel {
   <p class="hint">Configure how the pipeline identifies outdated content.</p>
 
   <label for="keyFacts">Key facts about current product state</label>
-  <div class="hint">Write clear, factual statements about how your product works <strong>today</strong>. These are injected into the AI prompt as ground truth. One fact per line.</div>
-  <textarea id="keyFacts" rows="6" placeholder="Copilot is built into Visual Studio 2022 17.10+ — no extension install needed.&#10;The Manage Extensions dialog is NOT the correct install path for Copilot in VS 2022 17.10+.&#10;For VS 2022 before 17.10, users DO still need to install via Manage Extensions."></textarea>
+  <div class="hint">Write clear, factual statements about how your product works <strong>today</strong>. The AI uses these as ground truth to judge whether an article is correct or outdated. These are <em>not</em> search terms — write complete sentences. One fact per line.</div>
+  <textarea id="keyFacts" rows="6" placeholder="Use the name &quot;Visual Studio&quot; without the year unless the context is that the specific version is required.&#10;Most of the time, &quot;Visual Studio&quot; will be the name listed.&#10;Visual Studio 2022 can be used if that's genuinely limited to that version."></textarea>
 
   <div class="checkbox-row">
     <input type="checkbox" id="enableLlm" checked />
@@ -355,16 +355,16 @@ export class ScenarioWizardPanel {
 
 <!-- Step 4: Classification -->
 <div class="step" data-step="4">
-  <h2>Step 4 — Classification</h2>
-  <p class="hint">Define patterns that identify your product in article text, used to determine if a page is in scope.</p>
+  <h2>Step 4 — Classification Scope</h2>
+  <p class="hint">These <strong>regex patterns</strong> determine whether a found page is "in scope" for your scenario. A page must match at least one product pattern to be classified (otherwise it's excluded as irrelevant).</p>
 
-  <label for="productPatterns">Product name patterns <span style="color:var(--vscode-errorForeground)">*</span></label>
-  <div class="hint">Regex patterns that match your product name in article text. One per line. These are case-insensitive.</div>
-  <textarea id="productPatterns" rows="3" placeholder="azure\\s+kubernetes\\s+service&#10;\\baks\\b"></textarea>
+  <label for="productPatterns">Product name patterns (regex) <span style="color:var(--vscode-errorForeground)">*</span></label>
+  <div class="hint">Regular expressions that match your product name in article text. Case-insensitive. One per line. Unlike the search queries in Step 2, these <em>are</em> regex patterns.</div>
+  <textarea id="productPatterns" rows="3" placeholder="\\bVisual Studio(?:\\s+\\d{4})?\\b&#10;\\bVS\\s+\\d{4}\\b"></textarea>
   <div class="error" id="productPatternsError">At least one product pattern is required.</div>
 
-  <label for="toolPatterns">Tool name patterns <span class="hint">(optional)</span></label>
-  <div class="hint">Regex patterns matching the tool or IDE name. Used to narrow scope when your product appears in multiple contexts.</div>
+  <label for="toolPatterns">Tool name patterns (regex) <span class="hint">(optional)</span></label>
+  <div class="hint">Regex patterns matching the tool or IDE name. If provided, a page must match <em>both</em> a product pattern and a tool pattern to be in scope.</div>
   <textarea id="toolPatterns" rows="2" placeholder="visual\\s+studio\\b(?!\\s*code)"></textarea>
 </div>
 
@@ -663,7 +663,9 @@ export class ScenarioWizardPanel {
     }
     y += '\\nhard_exclusions:\\n';
     y += '  url_regex: []\\n';
-    y += '  repo_regex: []\\n';
+    y += '  repo_regex:\\n';
+    y += '    - -archive-pr$\\n';
+    y += '    - -archive-docs-pr$\\n';
     y += '\\nclassification:\\n';
     y += '  default_confidence:\\n';
     y += '    p0_outdated: high\\n';
@@ -868,7 +870,9 @@ export function generateStrategyYaml(d: ScenarioFormData): string {
   }
   y += "\nhard_exclusions:\n";
   y += "  url_regex: []\n";
-  y += "  repo_regex: []\n";
+  y += "  repo_regex:\n";
+  y += "    - -archive-pr$    # Exclude archived doc repos by default\n";
+  y += "    - -archive-docs-pr$\n";
   y += "\nclassification:\n";
   y += "  default_confidence:\n";
   y += "    p0_outdated: high\n";
