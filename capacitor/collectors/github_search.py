@@ -247,6 +247,7 @@ class GitHubSearchCollector(BaseCollector):
         cache_dir: str | Path | None = None,
         use_cache: bool = True,
         repos_file: str | Path | None = None,
+        allowed_repos: List[str] | None = None,
         dry_run: bool = False,
     ):
         self.tracker_path = Path(tracker_path) if tracker_path else None
@@ -256,6 +257,9 @@ class GitHubSearchCollector(BaseCollector):
         self.cache_dir = Path(cache_dir) if cache_dir else None
         self.use_cache = use_cache
         self.repos_file = repos_file
+        self.allowed_repos: Set[str] | None = None
+        if allowed_repos:
+            self.allowed_repos = {r.lower() for r in allowed_repos}
         self.dry_run = dry_run
 
     # ── public API ────────────────────────────────────────────────
@@ -299,13 +303,16 @@ class GitHubSearchCollector(BaseCollector):
 
     def _collect_gh_cli(self) -> Iterator[Dict[str, Any]]:
         """Search GitHub orgs via ``gh`` CLI and yield page records."""
-        # Repo allowlist
-        allowed_repos: Optional[Set[str]] = None
-        if self.repos_file:
-            allowed_repos = _load_repos_allowlist(self.repos_file)
-            if allowed_repos:
+        # Repo allowlist — allowed_repos (from scenario) takes priority over repos_file
+        file_allowlist: Optional[Set[str]] = None
+        if self.allowed_repos:
+            logger.info("Using allowed_repos from scenario config: %d repos",
+                        len(self.allowed_repos))
+        elif self.repos_file:
+            file_allowlist = _load_repos_allowlist(self.repos_file)
+            if file_allowlist:
                 logger.info("Repo allowlist loaded: %d repos from %s",
-                            len(allowed_repos) // 2, self.repos_file)
+                            len(file_allowlist) // 2, self.repos_file)
 
         total_searches = len(self.orgs) * len(self.queries)
 
@@ -353,9 +360,14 @@ class GitHubSearchCollector(BaseCollector):
                     continue
                 if repo in self.excluded_repos:
                     continue
-                if allowed_repos and repo.startswith("MicrosoftDocs/"):
-                    repo_short = repo.split("/")[-1].lower()
-                    if repo_short not in allowed_repos:
+                repo_short = repo.split("/")[-1].lower()
+                # allowed_repos from scenario config — works for all orgs
+                if self.allowed_repos:
+                    if repo_short not in self.allowed_repos:
+                        continue
+                # Legacy repos_file allowlist — only filters MicrosoftDocs
+                elif file_allowlist and repo.startswith("MicrosoftDocs/"):
+                    if repo_short not in file_allowlist:
                         continue
                 seen.add(key)
                 hits.append(item)

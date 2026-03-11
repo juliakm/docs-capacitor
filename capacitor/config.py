@@ -174,6 +174,10 @@ class CapacitorConfig:
     def github_excluded_repos(self) -> List[str]:
         return self._scenario.get("search", {}).get("github", {}).get("excluded_repos", [])
 
+    @property
+    def github_allowed_repos(self) -> List[str]:
+        return self._scenario.get("search", {}).get("github", {}).get("allowed_repos", [])
+
     # -- URL filters -----------------------------------------------------------
 
     @property

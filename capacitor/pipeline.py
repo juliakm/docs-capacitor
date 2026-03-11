@@ -70,6 +70,7 @@ class Pipeline:
             cache_dir=self.out_dir,
             use_cache=gh_cfg.get("use_cache", True),
             repos_file=gh_cfg.get("repos_file"),
+            allowed_repos=gh_cfg.get("allowed_repos"),
             dry_run=gh_cfg.get("dry_run", False),
         )
 

@@ -40,6 +40,7 @@ SCENARIO_SCHEMA: Dict[str, Any] = {
                         "orgs": {"type": "array", "items": {"type": "string"}},
                         "queries": {"type": "array", "items": {"type": "string"}},
                         "excluded_repos": {"type": "array", "items": {"type": "string"}},
+                        "allowed_repos": {"type": "array", "items": {"type": "string"}},
                         "tracker": {"type": "string"},
                     },
                 },

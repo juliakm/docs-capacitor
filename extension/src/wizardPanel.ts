@@ -14,6 +14,7 @@ interface ScenarioFormData {
   githubOrgs: string[];
   githubQueries: string[];
   excludedRepos: string[];
+  allowedRepos: string[];
   relevantUrls: string[];
   skipUrls: string[];
   keyFacts: string[];
@@ -75,6 +76,9 @@ export class ScenarioWizardPanel {
           case "cancel":
             this.panel.dispose();
             break;
+          case "ready":
+            await this.sendDefaultRepos();
+            break;
         }
       },
       null,
@@ -88,6 +92,27 @@ export class ScenarioWizardPanel {
       d.dispose();
     }
     this.panel.dispose();
+  }
+
+  // ── default repos loader ─────────────────────────────────────────────
+
+  private async sendDefaultRepos(): Promise<void> {
+    const reposFilePath = vscode.workspace.getConfiguration("docs-capacitor").get<string>("defaultReposFile", "");
+    if (!reposFilePath) { return; }
+    try {
+      if (!fs.existsSync(reposFilePath)) { return; }
+      const content = fs.readFileSync(reposFilePath, "utf-8");
+      // Parse numbered lines like "1. azure-docs-pr" or "- repo-name"
+      const repos = content
+        .split("\n")
+        .map((line) => line.replace(/^\s*\d+\.\s*/, "").replace(/^\s*[-*]\s*/, "").trim())
+        .filter(Boolean);
+      if (repos.length > 0) {
+        this.panel.webview.postMessage({ command: "setDefaultRepos", repos });
+      }
+    } catch {
+      // Silently ignore file read errors
+    }
   }
 
   // ── save handler ──────────────────────────────────────────────────────
@@ -329,6 +354,12 @@ export class ScenarioWizardPanel {
   </details>
 
   <details>
+    <summary>Allowed repositories (optional)</summary>
+    <div class="hint" style="margin-top:4px">Only include results from these repos (short names, one per line). Leave empty to include all repos in the searched orgs.</div>
+    <textarea id="allowedRepos" rows="4" placeholder="azure-docs-pr&#10;learn-pr&#10;sql-docs-pr"></textarea>
+  </details>
+
+  <details>
     <summary>URL filters (optional)</summary>
     <div class="hint" style="margin-top:4px"><strong>Relevant URLs</strong> — Only keep pages whose URL contains one of these substrings. Leave empty to accept all.</div>
     <textarea id="relevantUrls" rows="2" placeholder="/azure/aks/&#10;/training/modules/"></textarea>
@@ -511,6 +542,7 @@ export class ScenarioWizardPanel {
       githubOrgs: lines('githubOrgs'),
       githubQueries: lines('githubQueries'),
       excludedRepos: lines('excludedRepos'),
+      allowedRepos: lines('allowedRepos'),
       relevantUrls: lines('relevantUrls'),
       skipUrls: lines('skipUrls'),
       keyFacts: lines('keyFacts'),
@@ -569,6 +601,10 @@ export class ScenarioWizardPanel {
       if (d.excludedRepos.length) {
         y += '    excluded_repos:\\n';
         y += yamlList(d.excludedRepos, '      ');
+      }
+      if (d.allowedRepos.length) {
+        y += '    allowed_repos:\\n';
+        y += yamlList(d.allowedRepos, '      ');
       }
     }
 
@@ -703,8 +739,20 @@ export class ScenarioWizardPanel {
   $('#btnSave').addEventListener('click', () => vscode.postMessage({ command: 'save', data: collectData() }));
   $('#btnCancel').addEventListener('click', () => vscode.postMessage({ command: 'cancel' }));
 
+  // ── receive messages from extension host ────────────────────────────
+  window.addEventListener('message', (event) => {
+    const msg = event.data;
+    if (msg.command === 'setDefaultRepos' && Array.isArray(msg.repos)) {
+      const el = $('#allowedRepos');
+      if (el && !el.value.trim()) {
+        el.value = msg.repos.join('\\n');
+      }
+    }
+  });
+
   // init
   showStep(1);
+  vscode.postMessage({ command: 'ready' });
 })();
 </script>
 </body>
@@ -774,6 +822,10 @@ export function generateScenarioYaml(d: ScenarioFormData): string {
     if (d.excludedRepos.length) {
       y += "    excluded_repos:\n";
       y += yamlList(d.excludedRepos, "      ");
+    }
+    if (d.allowedRepos.length) {
+      y += "    allowed_repos:\n";
+      y += yamlList(d.allowedRepos, "      ");
     }
   }
 

@@ -327,6 +327,11 @@
           "items": { "type": "string" },
           "default": [],
           "description": "Additional directories to search for scenario.yaml files (absolute paths or relative to workspace root)"
+        },
+        "docs-capacitor.defaultReposFile": {
+          "type": "string",
+          "default": "",
+          "description": "Path to a file containing default allowed repository names (one per line). Used to pre-populate new scenarios."
         }
       }
     },
