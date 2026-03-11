@@ -230,14 +230,38 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
   );
 
-  // --- Results: Mark as Reviewed ---
+  // --- Results: Triage - Mark as Valid ---
   context.subscriptions.push(
-    vscode.commands.registerCommand("docs-capacitor.markReviewed", (item: { pageResult?: { url: string } }) => {
+    vscode.commands.registerCommand("docs-capacitor.triageValid", (item: { pageResult?: { url: string } }) => {
       const url = item?.pageResult?.url;
       if (url) {
-        resultsProvider.markReviewed(url);
-        vscode.window.showInformationMessage(`Marked as reviewed: ${url}`);
+        resultsProvider.triageUrl(url, "valid");
+        vscode.window.showInformationMessage(`✅ Marked as valid finding: ${url}`);
       }
+    }),
+  );
+
+  // --- Results: Triage - Mark as False Positive ---
+  context.subscriptions.push(
+    vscode.commands.registerCommand("docs-capacitor.triageFalsePositive", (item: { pageResult?: { url: string } }) => {
+      const url = item?.pageResult?.url;
+      if (url) {
+        resultsProvider.triageUrl(url, "false_positive");
+        vscode.window.showInformationMessage(`❌ Marked as false positive: ${url}`);
+      }
+    }),
+  );
+
+  // --- Results: Triage - Ignore Repo ---
+  context.subscriptions.push(
+    vscode.commands.registerCommand("docs-capacitor.triageIgnoreRepo", (item: { pageResult?: PageResult }) => {
+      const r = item?.pageResult;
+      if (!r?.repo) {
+        vscode.window.showWarningMessage("No repo information available for this result.");
+        return;
+      }
+      resultsProvider.triageIgnoreRepo(r.repo);
+      vscode.window.showInformationMessage(`🔇 Ignoring repo: ${r.repo}`);
     }),
   );
 
@@ -287,21 +311,126 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
   );
 
+  // --- Results: Triage - Suggest Improvements ---
+  context.subscriptions.push(
+    vscode.commands.registerCommand("docs-capacitor.triageSuggest", () => {
+      const triageState = resultsProvider.getTriageState();
+      const scenarioName = resultsProvider.getActiveScenario() ?? "unknown";
+
+      const fpUrls = Object.entries(triageState.decisions)
+        .filter(([, d]) => d === "false_positive" || d === "ignore_repo")
+        .map(([url]) => url);
+
+      if (fpUrls.length === 0 && triageState.ignored_repos.length === 0) {
+        vscode.window.showInformationMessage("No false positives or ignored repos to analyze. Triage some results first.");
+        return;
+      }
+
+      // Group false positive URLs by common path segments
+      const pathGroups: Record<string, string[]> = {};
+      for (const url of fpUrls) {
+        try {
+          const u = new URL(url);
+          const segments = u.pathname.split("/").filter(Boolean);
+          // Use the first 2-3 path segments as the group key
+          const key = segments.length >= 2 ? `/${segments.slice(0, 2).join("/")}` : u.pathname;
+          if (!pathGroups[key]) { pathGroups[key] = []; }
+          pathGroups[key].push(url);
+        } catch {
+          if (!pathGroups["other"]) { pathGroups["other"] = []; }
+          pathGroups["other"].push(url);
+        }
+      }
+
+      // Read current scenario config if available
+      let scenarioExcludedRepos = "(not found)";
+      let strategyHardExclusions = "(not found)";
+      const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+      if (workspaceRoot) {
+        const fsModule = require("fs") as typeof import("fs");
+        const yaml = require("js-yaml");
+        // Try to find scenario.yaml
+        const scenarioDir = path.join(workspaceRoot, "scenarios", scenarioName);
+        const scenarioYaml = path.join(scenarioDir, "scenario.yaml");
+        if (fsModule.existsSync(scenarioYaml)) {
+          try {
+            const doc = yaml.load(fsModule.readFileSync(scenarioYaml, "utf-8")) as Record<string, unknown>;
+            scenarioExcludedRepos = JSON.stringify(doc?.["excluded_repos"] ?? [], null, 2);
+          } catch { /* ignore */ }
+        }
+        // Try to find strategy.yaml
+        const strategyYaml = path.join(scenarioDir, "strategy.yaml");
+        if (fsModule.existsSync(strategyYaml)) {
+          try {
+            const doc = yaml.load(fsModule.readFileSync(strategyYaml, "utf-8")) as Record<string, unknown>;
+            const hardExclusions = (doc as Record<string, unknown>)?.["hard_exclusions"];
+            strategyHardExclusions = JSON.stringify(hardExclusions ?? {}, null, 2);
+          } catch { /* ignore */ }
+        }
+      }
+
+      // Build the prompt
+      const promptParts: string[] = [
+        `I'm tuning a docs freshness scenario called "${scenarioName}". Here are results I marked as false positives:`,
+        "",
+      ];
+
+      if (triageState.ignored_repos.length > 0) {
+        promptParts.push("**Repos to exclude:**");
+        for (const repo of triageState.ignored_repos) {
+          promptParts.push(`- ${repo}`);
+        }
+        promptParts.push("");
+      }
+
+      promptParts.push("**False positive URLs (grouped by path pattern):**");
+      for (const [pattern, urls] of Object.entries(pathGroups)) {
+        promptParts.push(`\n_Pattern: ${pattern}_ (${urls.length} URLs)`);
+        for (const url of urls.slice(0, 5)) {
+          promptParts.push(`- ${url}`);
+        }
+        if (urls.length > 5) {
+          promptParts.push(`- ... and ${urls.length - 5} more`);
+        }
+      }
+
+      promptParts.push("");
+      promptParts.push(`Current scenario.yaml excluded_repos: ${scenarioExcludedRepos}`);
+      promptParts.push(`Current strategy.yaml hard_exclusions: ${strategyHardExclusions}`);
+      promptParts.push("");
+      promptParts.push("Please suggest specific changes to my scenario.yaml and strategy.yaml to exclude these false positives while keeping valid results.");
+
+      const prompt = promptParts.join("\n");
+
+      vscode.commands.executeCommand("workbench.action.chat.open", { query: prompt }).then(
+        undefined,
+        () => {
+          vscode.env.clipboard.writeText(prompt);
+          vscode.window.showInformationMessage(
+            "Copilot Chat not available. Suggestions prompt copied to clipboard.",
+          );
+        },
+      );
+    }),
+  );
+
   // --- Results: Filter ---
   context.subscriptions.push(
     vscode.commands.registerCommand("docs-capacitor.filterResults", async () => {
       const choices = [
-        { label: "Show All", value: undefined },
-        { label: "P0_OUTDATED", value: "P0_OUTDATED" },
-        { label: "NEEDS_CLARIFICATION", value: "NEEDS_CLARIFICATION" },
-        { label: "UP_TO_DATE", value: "UP_TO_DATE" },
-        { label: "EXCLUDED", value: "EXCLUDED" },
+        { label: "Show All", value: undefined, untriaged: false },
+        { label: "Show Untriaged Only", value: undefined, untriaged: true },
+        { label: "P0_OUTDATED", value: "P0_OUTDATED", untriaged: false },
+        { label: "NEEDS_CLARIFICATION", value: "NEEDS_CLARIFICATION", untriaged: false },
+        { label: "UP_TO_DATE", value: "UP_TO_DATE", untriaged: false },
+        { label: "EXCLUDED", value: "EXCLUDED", untriaged: false },
       ];
       const picked = await vscode.window.showQuickPick(choices, {
         placeHolder: "Filter results by classification",
       });
       if (picked !== undefined) {
         resultsProvider.setFilter(picked.value);
+        resultsProvider.setShowUntriagedOnly(picked.untriaged);
       }
     }),
   );

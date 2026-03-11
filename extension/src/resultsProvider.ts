@@ -99,9 +99,25 @@ export class ResultItem extends vscode.TreeItem {
   }
 }
 
-// ── Reviewed state persistence ───────────────────────────────────────
+// ── Triage state persistence ─────────────────────────────────────────
 
-function reviewedFilePath(scenario?: string): string | undefined {
+export type TriageDecision = "valid" | "false_positive" | "ignore_repo";
+
+export interface TriageState {
+  decisions: Record<string, TriageDecision>;  // keyed by URL
+  ignored_repos: string[];  // repos to exclude
+}
+
+function triageFilePath(scenario?: string): string | undefined {
+  const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+  if (!root) { return undefined; }
+  if (scenario) {
+    return path.join(root, "output", scenario, ".capacitor-triage.json");
+  }
+  return path.join(root, "output", ".capacitor-triage.json");
+}
+
+function legacyReviewedFilePath(scenario?: string): string | undefined {
   const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
   if (!root) { return undefined; }
   if (scenario) {
@@ -110,22 +126,40 @@ function reviewedFilePath(scenario?: string): string | undefined {
   return path.join(root, "output", ".capacitor-reviewed.json");
 }
 
-function loadReviewed(scenario?: string): Set<string> {
-  const fp = reviewedFilePath(scenario);
-  if (!fp || !fs.existsSync(fp)) { return new Set(); }
-  try {
-    const data: unknown = JSON.parse(fs.readFileSync(fp, "utf-8"));
-    if (Array.isArray(data)) { return new Set(data.map(String)); }
-  } catch { /* ignore */ }
-  return new Set();
+function loadTriageState(scenario?: string): TriageState {
+  const fp = triageFilePath(scenario);
+  if (fp && fs.existsSync(fp)) {
+    try {
+      const data = JSON.parse(fs.readFileSync(fp, "utf-8")) as Partial<TriageState>;
+      return {
+        decisions: data.decisions && typeof data.decisions === "object" ? data.decisions : {},
+        ignored_repos: Array.isArray(data.ignored_repos) ? data.ignored_repos : [],
+      };
+    } catch { /* ignore */ }
+  }
+
+  // Backward compat: migrate legacy .capacitor-reviewed.json → valid decisions
+  const legacyFp = legacyReviewedFilePath(scenario);
+  if (legacyFp && fs.existsSync(legacyFp)) {
+    try {
+      const data: unknown = JSON.parse(fs.readFileSync(legacyFp, "utf-8"));
+      if (Array.isArray(data)) {
+        const decisions: Record<string, TriageDecision> = {};
+        for (const url of data) { decisions[String(url)] = "valid"; }
+        return { decisions, ignored_repos: [] };
+      }
+    } catch { /* ignore */ }
+  }
+
+  return { decisions: {}, ignored_repos: [] };
 }
 
-function saveReviewed(urls: Set<string>, scenario?: string): void {
-  const fp = reviewedFilePath(scenario);
+function saveTriageState(state: TriageState, scenario?: string): void {
+  const fp = triageFilePath(scenario);
   if (!fp) { return; }
   const dir = path.dirname(fp);
   if (!fs.existsSync(dir)) { fs.mkdirSync(dir, { recursive: true }); }
-  fs.writeFileSync(fp, JSON.stringify([...urls], null, 2));
+  fs.writeFileSync(fp, JSON.stringify(state, null, 2));
 }
 
 // ── Provider ─────────────────────────────────────────────────────────
@@ -139,8 +173,9 @@ export class ResultsProvider implements vscode.TreeDataProvider<ResultItem> {
   readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
 
   private results: PageResult[] = [];
-  private reviewed: Set<string> = new Set();
+  private triageState: TriageState = { decisions: {}, ignored_repos: [] };
   private activeFilter: string | undefined;
+  private showUntriagedOnly = false;
   private treeView: vscode.TreeView<ResultItem> | undefined;
   /** Counts from the JSON meta block. */
   private meta: { actionable: number; non_actionable: number; total: number } | undefined;
@@ -220,16 +255,50 @@ export class ResultsProvider implements vscode.TreeDataProvider<ResultItem> {
     this.updateSummaryMessage();
   }
 
-  /** Mark a URL as reviewed and persist. */
-  markReviewed(url: string): void {
-    this.reviewed.add(url);
-    saveReviewed(this.reviewed, this.activeScenario);
+  /** Toggle the "show untriaged only" filter. */
+  setShowUntriagedOnly(value: boolean): void {
+    this.showUntriagedOnly = value;
     this._onDidChangeTreeData.fire();
+    this.updateSummaryMessage();
   }
 
-  /** Check if a URL has been reviewed. */
-  isReviewed(url: string): boolean {
-    return this.reviewed.has(url);
+  /** Apply a triage decision to a URL. */
+  triageUrl(url: string, decision: TriageDecision): void {
+    this.triageState.decisions[url] = decision;
+    saveTriageState(this.triageState, this.activeScenario);
+    this._onDidChangeTreeData.fire();
+    this.updateSummaryMessage();
+  }
+
+  /** Ignore an entire repo — marks all results from that repo as false_positive too. */
+  triageIgnoreRepo(repo: string): void {
+    if (!this.triageState.ignored_repos.includes(repo)) {
+      this.triageState.ignored_repos.push(repo);
+    }
+    // Mark all results from this repo as false_positive
+    for (const r of this.results) {
+      if (r.repo === repo) {
+        this.triageState.decisions[r.url] = "false_positive";
+      }
+    }
+    saveTriageState(this.triageState, this.activeScenario);
+    this._onDidChangeTreeData.fire();
+    this.updateSummaryMessage();
+  }
+
+  /** Get the current triage decision for a URL. */
+  getTriageDecision(url: string): TriageDecision | undefined {
+    return this.triageState.decisions[url];
+  }
+
+  /** Get the full triage state (for suggestions). */
+  getTriageState(): TriageState {
+    return this.triageState;
+  }
+
+  /** Get all loaded results (for suggestions). */
+  getResults(): PageResult[] {
+    return this.results;
   }
 
   // ── TreeDataProvider implementation ────────────────────────────────
@@ -278,7 +347,7 @@ export class ResultsProvider implements vscode.TreeDataProvider<ResultItem> {
     return this.filteredResults()
       .filter((r) => r.classification === classification)
       .map((r) => {
-        const reviewed = this.reviewed.has(r.url);
+        const decision = this.triageState.decisions[r.url];
         // Show title or last URL segment as the label, full URL as description
         const displayTitle = r.title || titleFromUrl(r.url);
         const shortUrl = shortenUrl(r.url);
@@ -291,18 +360,32 @@ export class ResultsProvider implements vscode.TreeDataProvider<ResultItem> {
         );
         const parts: string[] = [shortUrl];
         if (r.topic) { parts.push(r.topic); }
-        item.description = parts.join(" · ");
+
+        if (decision === "valid") {
+          item.description = `✓ Valid — ${parts.join(" · ")}`;
+          item.iconPath = new vscode.ThemeIcon("check", new vscode.ThemeColor("testing.iconPassed"));
+          item.contextValue = "pageTriagedValid";
+        } else if (decision === "false_positive" || decision === "ignore_repo") {
+          item.description = `✗ False positive — ${parts.join(" · ")}`;
+          item.iconPath = new vscode.ThemeIcon("circle-slash", new vscode.ThemeColor("disabledForeground"));
+          item.contextValue = "pageTriagedFP";
+        } else {
+          item.description = parts.join(" · ");
+          item.iconPath = classificationIcon(classification);
+          item.contextValue = "page";
+        }
+
+        const triageNote = decision === "valid" ? "\n\n✅ _Triaged: Valid Finding_"
+          : decision === "false_positive" ? "\n\n❌ _Triaged: False Positive_"
+          : decision === "ignore_repo" ? "\n\n🔇 _Triaged: Repo Ignored_"
+          : "";
         item.tooltip = new vscode.MarkdownString(
           `**${displayTitle}**\n\n${r.url}\n\nClassification: ${r.classification}  \nConfidence: ${formatConfidence(r.confidence)}` +
           (r.topic ? `  \nTopic: ${r.topic}` : "") +
           (r.reason ? `  \nReason: ${r.reason}` : "") +
           (r.suggested_fix ? `  \nFix: ${r.suggested_fix}` : "") +
-          (reviewed ? "\n\n✅ _Reviewed_" : ""),
+          triageNote,
         );
-        item.iconPath = reviewed
-          ? new vscode.ThemeIcon("pass", new vscode.ThemeColor("disabledForeground"))
-          : classificationIcon(classification);
-        item.contextValue = reviewed ? "pageReviewed" : "page";
         item.command = {
           command: "docs-capacitor.openResultUrl",
           title: "Open URL",
@@ -407,28 +490,39 @@ export class ResultsProvider implements vscode.TreeDataProvider<ResultItem> {
     }
     const outdated = all.filter((r) => r.classification === "P0_OUTDATED").length;
     const needsReview = all.filter((r) => r.classification === "NEEDS_CLARIFICATION").length;
+    const triaged = Object.keys(this.triageState.decisions).filter((url) =>
+      all.some((r) => r.url === url),
+    ).length;
+    const remaining = all.length - triaged;
+
     const parts: string[] = [];
     if (outdated > 0) { parts.push(`🔥 ${outdated} outdated`); }
     if (needsReview > 0) { parts.push(`⚠️ ${needsReview} needs review`); }
     if (parts.length === 0) { parts.push(`${all.length} results`); }
-    // Show total scanned vs actionable from meta
-    if (this.meta) {
-      parts.push(`(${this.meta.actionable} actionable of ${this.meta.total} scanned)`);
+    if (triaged > 0) {
+      parts.push(`(${triaged} triaged, ${remaining} remaining)`);
     }
     const scenarioNote = this.activeScenario ? ` [${this.activeScenario}]` : "";
-    const filterNote = this.activeFilter ? ` (filtered: ${this.activeFilter})` : "";
+    const filterNote = this.activeFilter ? ` (filtered: ${this.activeFilter})`
+      : this.showUntriagedOnly ? " (untriaged only)" : "";
     this.treeView.message = parts.join(", ") + scenarioNote + filterNote;
   }
 
   // ── Helpers ────────────────────────────────────────────────────────
 
   private filteredResults(): PageResult[] {
-    if (!this.activeFilter) { return this.results; }
-    return this.results.filter((r) => r.classification === this.activeFilter);
+    let results = this.results;
+    if (this.activeFilter) {
+      results = results.filter((r) => r.classification === this.activeFilter);
+    }
+    if (this.showUntriagedOnly) {
+      results = results.filter((r) => !this.triageState.decisions[r.url]);
+    }
+    return results;
   }
 
   private loadResults(): void {
-    this.reviewed = loadReviewed(this.activeScenario);
+    this.triageState = loadTriageState(this.activeScenario);
 
     const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
     if (!workspaceRoot) {
