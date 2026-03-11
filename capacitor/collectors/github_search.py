@@ -195,8 +195,8 @@ def _fetch_raw_file(
 
 # ── search-result cache helpers ───────────────────────────────────
 
-def _load_search_cache(cache_path: Path) -> Optional[List[Dict[str, Any]]]:
-    """Load cached pages if present and younger than *CACHE_TTL_HOURS*."""
+def _load_search_cache(cache_path: Path, cache_key: str = "") -> Optional[List[Dict[str, Any]]]:
+    """Load cached pages if present, younger than *CACHE_TTL_HOURS*, and matching the cache key."""
     if not cache_path.exists():
         return None
     try:
@@ -206,15 +206,19 @@ def _load_search_cache(cache_path: Path) -> Optional[List[Dict[str, Any]]]:
         if age_hours > CACHE_TTL_HOURS:
             logger.info("Cache expired (%.1fh old), refreshing", age_hours)
             return None
+        # Invalidate if the queries/orgs changed since the cache was saved
+        if cache_key and data.get("cache_key", "") != cache_key:
+            logger.info("Cache invalidated — search configuration changed since last run")
+            return None
         logger.info("Using cached results (%.1fh old)", age_hours)
         return data.get("pages", [])
     except Exception:
         return None
 
 
-def _save_search_cache(cache_path: Path, pages: List[Dict[str, Any]]) -> None:
+def _save_search_cache(cache_path: Path, pages: List[Dict[str, Any]], cache_key: str = "") -> None:
     cache_path.parent.mkdir(parents=True, exist_ok=True)
-    payload = {"timestamp": time.time(), "pages": pages}
+    payload = {"timestamp": time.time(), "cache_key": cache_key, "pages": pages}
     cache_path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
 
 
@@ -314,10 +318,16 @@ class GitHubSearchCollector(BaseCollector):
             print(f"Excluded repos: {', '.join(sorted(self.excluded_repos))}")
             return
 
+        # Build a cache key from the search configuration so changes invalidate the cache
+        import hashlib
+        key_input = json.dumps({"orgs": sorted(self.orgs), "queries": sorted(self.queries),
+                                "excluded": sorted(self.excluded_repos)}, sort_keys=True)
+        cache_key = hashlib.sha256(key_input.encode()).hexdigest()[:16]
+
         # Check cache
         cache_path = (self.cache_dir / "github_search_cache.json") if self.cache_dir else None
         if self.use_cache and cache_path:
-            cached = _load_search_cache(cache_path)
+            cached = _load_search_cache(cache_path, cache_key)
             if cached is not None:
                 yield from cached
                 return
@@ -371,7 +381,7 @@ class GitHubSearchCollector(BaseCollector):
 
         # Write cache
         if cache_path and pages:
-            _save_search_cache(cache_path, pages)
+            _save_search_cache(cache_path, pages, cache_key)
 
     # ── helpers ───────────────────────────────────────────────────
 
