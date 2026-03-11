@@ -221,9 +221,14 @@
           "group": "3_manage@3"
         },
         {
+          "command": "docs-capacitor.openResultUrl",
+          "when": "view == docsCapacitorResults && viewItem =~ /^page/",
+          "group": "inline@1"
+        },
+        {
           "command": "docs-capacitor.fixWithCopilot",
           "when": "view == docsCapacitorResults && viewItem =~ /^page$|^pageTriagedValid$/",
-          "group": "inline@1"
+          "group": "inline@2"
         },
         {
           "command": "docs-capacitor.fixWithCopilot",

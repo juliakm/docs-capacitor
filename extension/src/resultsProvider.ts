@@ -386,11 +386,8 @@ export class ResultsProvider implements vscode.TreeDataProvider<ResultItem> {
           (r.suggested_fix ? `  \nFix: ${r.suggested_fix}` : "") +
           triageNote,
         );
-        item.command = {
-          command: "docs-capacitor.openResultUrl",
-          title: "Open URL",
-          arguments: [r.url],
-        };
+        // No command on click — left-click expands details instead of opening URL.
+        // Use the context menu "Open URL" action to open deliberately.
         return item;
       });
   }

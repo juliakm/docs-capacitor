@@ -192,8 +192,11 @@ export function activate(context: vscode.ExtensionContext): void {
 
   // --- Results: Open URL ---
   context.subscriptions.push(
-    vscode.commands.registerCommand("docs-capacitor.openResultUrl", (url: string) => {
-      vscode.env.openExternal(vscode.Uri.parse(url));
+    vscode.commands.registerCommand("docs-capacitor.openResultUrl", (arg: string | { pageResult?: { url: string } }) => {
+      const url = typeof arg === "string" ? arg : arg?.pageResult?.url;
+      if (url) {
+        vscode.env.openExternal(vscode.Uri.parse(url));
+      }
     }),
   );
 
