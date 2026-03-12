@@ -178,6 +178,11 @@ class CapacitorConfig:
     def github_allowed_repos(self) -> List[str]:
         return self._scenario.get("search", {}).get("github", {}).get("allowed_repos", [])
 
+    @property
+    def github_date_filter(self) -> Dict[str, str]:
+        """Date filter config: ``{after, before, mode}``."""
+        return self._scenario.get("search", {}).get("github", {}).get("date_filter", {})
+
     # -- URL filters -----------------------------------------------------------
 
     @property

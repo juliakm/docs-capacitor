@@ -42,6 +42,19 @@ SCENARIO_SCHEMA: Dict[str, Any] = {
                         "excluded_repos": {"type": "array", "items": {"type": "string"}},
                         "allowed_repos": {"type": "array", "items": {"type": "string"}},
                         "tracker": {"type": "string"},
+                        "date_filter": {
+                            "type": "object",
+                            "description": "Filter articles by ms.date front-matter metadata.",
+                            "properties": {
+                                "after": {"type": "string", "description": "Exclude articles with ms.date before this date (YYYY-MM-DD)."},
+                                "before": {"type": "string", "description": "Exclude articles with ms.date after this date (YYYY-MM-DD)."},
+                                "mode": {
+                                    "type": "string",
+                                    "enum": ["exclude", "flag"],
+                                    "description": "exclude = drop articles outside range; flag = keep but mark them.",
+                                },
+                            },
+                        },
                     },
                 },
                 "learn": {

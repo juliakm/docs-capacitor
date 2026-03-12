@@ -436,6 +436,11 @@ class TopicRulesClassifier(BaseClassifier):
                 release_notes=release_notes,
                 section_key=self.section_key,
             )
+            # Carry through metadata from collection phase
+            if page.get("ms_date"):
+                rec["ms_date"] = page["ms_date"]
+            if page.get("date_flag"):
+                rec["date_flag"] = page["date_flag"]
             classifications.append(rec)
 
         _cls_order = {c: i for i, c in enumerate(CLASSIFICATIONS)}

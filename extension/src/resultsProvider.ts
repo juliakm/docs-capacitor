@@ -30,6 +30,8 @@ export interface PageResult {
   agrees_with_regex?: boolean;
   repo?: string;
   llm_findings?: LlmFinding[];
+  ms_date?: string;
+  date_flag?: string;
 }
 
 /** Format confidence for display — handles both string ("high") and numeric (0.85) values. */
@@ -437,6 +439,10 @@ export class ResultsProvider implements vscode.TreeDataProvider<ResultItem> {
     }
 
     add("Confidence", formatConfidence(r.confidence), "dashboard");
+    if (r.ms_date) {
+      const dateLabel = r.date_flag === "outside_range" ? `${r.ms_date} ⚠️ outside date range` : r.ms_date;
+      add("Article Date (ms.date)", dateLabel, "calendar");
+    }
     if (!r.llm_findings?.length) {
       // Only show generic reason/fix if there are no detailed LLM findings
       add("Reason", r.reason, "comment");
@@ -640,6 +646,8 @@ export class ResultsProvider implements vscode.TreeDataProvider<ResultItem> {
                 severity: f["severity"] != null ? String(f["severity"]) : undefined,
               }))
             : undefined,
+          ms_date: r["ms_date"] != null ? String(r["ms_date"]) : undefined,
+          date_flag: r["date_flag"] != null ? String(r["date_flag"]) : undefined,
         };
       });
       return true;

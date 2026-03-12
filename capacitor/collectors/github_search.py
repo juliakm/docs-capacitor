@@ -27,10 +27,57 @@ import urllib.request
 from pathlib import Path
 from typing import Any, Dict, Iterator, List, Optional, Set
 
+import yaml as _yaml
+
 from capacitor.collectors.base import BaseCollector
 from capacitor.collectors import register_collector
 
 logger = logging.getLogger(__name__)
+
+
+# ── front-matter helpers ──────────────────────────────────────────
+
+def _extract_ms_date(text: str) -> Optional[str]:
+    """Extract ``ms.date`` from YAML front matter in a markdown file.
+
+    Returns the date string (e.g. ``"01/15/2023"``) or *None*.
+    """
+    if not text.startswith("---"):
+        return None
+    end = text.find("\n---", 3)
+    if end == -1:
+        return None
+    try:
+        fm = _yaml.safe_load(text[3:end])
+    except Exception:
+        return None
+    if not isinstance(fm, dict):
+        return None
+    # ms.date is stored with a dot-key in the front matter:
+    #   ms.date: 01/15/2023
+    # PyYAML parses this as {"ms.date": "01/15/2023"} (key is the literal string)
+    raw = fm.get("ms.date")
+    if raw is None:
+        return None
+    return str(raw).strip()
+
+
+def _parse_ms_date(date_str: str) -> Optional[str]:
+    """Normalise an ms.date value to ``YYYY-MM-DD``.
+
+    Handles ``MM/DD/YYYY`` (most common) and ``YYYY-MM-DD``.
+    Returns *None* on failure.
+    """
+    import re as _re
+    # MM/DD/YYYY
+    m = _re.match(r"^(\d{1,2})/(\d{1,2})/(\d{4})$", date_str)
+    if m:
+        return f"{m.group(3)}-{int(m.group(1)):02d}-{int(m.group(2)):02d}"
+    # YYYY-MM-DD (already normalised)
+    m = _re.match(r"^\d{4}-\d{2}-\d{2}$", date_str)
+    if m:
+        return date_str
+    return None
 
 # ── rate-limit / retry defaults ───────────────────────────────────
 RATE_LIMIT_DELAY = 3            # seconds between search API calls
@@ -249,6 +296,7 @@ class GitHubSearchCollector(BaseCollector):
         repos_file: str | Path | None = None,
         allowed_repos: List[str] | None = None,
         dry_run: bool = False,
+        date_filter: Dict[str, str] | None = None,
     ):
         self.tracker_path = Path(tracker_path) if tracker_path else None
         self.excluded_repos = set(excluded_repos) if excluded_repos else set()
@@ -261,6 +309,8 @@ class GitHubSearchCollector(BaseCollector):
         if allowed_repos:
             self.allowed_repos = {r.lower() for r in allowed_repos}
         self.dry_run = dry_run
+        # date_filter: {"after": "YYYY-MM-DD", "before": "YYYY-MM-DD", "mode": "exclude"|"flag"}
+        self.date_filter = date_filter or {}
 
     # ── public API ────────────────────────────────────────────────
 
@@ -288,6 +338,10 @@ class GitHubSearchCollector(BaseCollector):
         tracker = json.loads(self.tracker_path.read_text(encoding="utf-8"))
         files = tracker.get("files", [])
 
+        filter_mode = self.date_filter.get("mode", "exclude")
+        date_after = self.date_filter.get("after")
+        date_before = self.date_filter.get("before")
+
         for i, entry in enumerate(files, 1):
             repo = entry["repo"]
             path = entry["path"]
@@ -295,6 +349,25 @@ class GitHubSearchCollector(BaseCollector):
                 continue
             result = _fetch_raw_file(repo, path)
             if result:
+                # Extract ms.date from content
+                ms_date_raw = _extract_ms_date(result.get("text", ""))
+                ms_date = _parse_ms_date(ms_date_raw) if ms_date_raw else None
+
+                failed_date_check = False
+                if ms_date:
+                    if date_after and ms_date < date_after:
+                        failed_date_check = True
+                    if date_before and ms_date > date_before:
+                        failed_date_check = True
+
+                if failed_date_check and filter_mode == "exclude":
+                    continue
+
+                if ms_date:
+                    result["ms_date"] = ms_date
+                if failed_date_check:
+                    result["date_flag"] = "outside_range"
+
                 yield result
             if i % 50 == 0:
                 time.sleep(1)
@@ -378,18 +451,48 @@ class GitHubSearchCollector(BaseCollector):
 
         # Fetch phase
         pages: List[Dict[str, Any]] = []
+        date_skipped = 0
         for i, hit in enumerate(hits):
             content = _gh_api_file(hit["repo"], hit["path"])
             if content:
-                page = {
+                # Extract ms.date from YAML front matter
+                ms_date_raw = _extract_ms_date(content)
+                ms_date = _parse_ms_date(ms_date_raw) if ms_date_raw else None
+
+                # Date filtering
+                filter_mode = self.date_filter.get("mode", "exclude")
+                date_after = self.date_filter.get("after")
+                date_before = self.date_filter.get("before")
+                failed_date_check = False
+                if ms_date:
+                    if date_after and ms_date < date_after:
+                        failed_date_check = True
+                    if date_before and ms_date > date_before:
+                        failed_date_check = True
+
+                if failed_date_check and filter_mode == "exclude":
+                    date_skipped += 1
+                    continue
+
+                page: Dict[str, Any] = {
                     "url": f"https://github.com/{hit['repo']}/blob/main/{hit['path']}",
                     "repo": hit["repo"],
                     "text": content,
                 }
+                if ms_date:
+                    page["ms_date"] = ms_date
+                if failed_date_check:
+                    # mode == "flag": include but mark as outside date range
+                    page["date_flag"] = "outside_range"
+
                 pages.append(page)
                 yield page
             if (i + 1) % 10 == 0:
                 logger.info("Fetched %d/%d files", i + 1, len(hits))
+
+        if date_skipped:
+            logger.info("Skipped %d files outside date range", date_skipped)
+            print(f"  Skipped {date_skipped} files outside date range")
 
         # Write cache
         if cache_path and pages:

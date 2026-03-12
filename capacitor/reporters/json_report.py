@@ -69,6 +69,8 @@ class JSONReporter(BaseReporter):
                 "agrees_with_regex": row.get("agrees_with_regex", False),
                 "repo": row.get("repo", ""),
                 "llm_findings": row.get("llm_findings", []),
+                "ms_date": row.get("ms_date", ""),
+                "date_flag": row.get("date_flag", ""),
             })
 
         metadata = {
