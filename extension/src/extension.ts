@@ -544,6 +544,7 @@ function loadScenarioConfig(scenarioDir: string | undefined): ScenarioConfig {
     allowed_repos: [],
     hard_exclusion_url_regex: [],
     hard_exclusion_repo_regex: [],
+    queries: [],
   };
   if (!scenarioDir) { return empty; }
 
@@ -564,6 +565,9 @@ function loadScenarioConfig(scenarioDir: string | undefined): ScenarioConfig {
       }
       if (Array.isArray(github?.allowed_repos)) {
         config.allowed_repos = github.allowed_repos as string[];
+      }
+      if (Array.isArray(github?.queries)) {
+        config.queries = github.queries as string[];
       }
     } catch { /* ignore parse errors */ }
   }
@@ -694,14 +698,25 @@ async function applySuggestion(
     const raw = fs.readFileSync(filePath, "utf-8");
     const doc = yaml.load(raw) as Record<string, unknown>;
 
-    if (suggestion.type === "remove_allowed_repo") {
-      // Remove from allowed_repos list
+    if (suggestion.type === "remove_allowed_repo" || suggestion.type === "remove_query") {
+      // Remove from the target array
       const arr = getNestedArray(doc, suggestion.yamlKey);
       if (arr) {
         const idx = arr.findIndex(
           (v: string) => v.toLowerCase() === suggestion.value.toLowerCase(),
         );
         if (idx !== -1) { arr.splice(idx, 1); }
+      }
+    } else if (suggestion.type === "refine_query" && suggestion.replacement) {
+      // Replace query with the refined version
+      const arr = getNestedArray(doc, suggestion.yamlKey);
+      if (arr) {
+        const idx = arr.findIndex(
+          (v: string) => v.toLowerCase() === suggestion.value.toLowerCase(),
+        );
+        if (idx !== -1) {
+          arr[idx] = suggestion.replacement;
+        }
       }
     } else {
       // Add to the target array
@@ -714,10 +729,14 @@ async function applySuggestion(
     const output = yaml.dump(doc, { lineWidth: -1, quotingType: "'", forceQuotes: false });
     fs.writeFileSync(filePath, output, "utf-8");
 
-    const actionVerb = suggestion.type === "remove_allowed_repo" ? "Removed" : "Added";
-    const preposition = suggestion.type === "remove_allowed_repo" ? "from" : "to";
+    const actionVerb = suggestion.type === "remove_allowed_repo" || suggestion.type === "remove_query"
+      ? "Removed" : suggestion.type === "refine_query" ? "Refined" : "Added";
+    const preposition = suggestion.type === "remove_allowed_repo" || suggestion.type === "remove_query"
+      ? "from" : suggestion.type === "refine_query" ? "in" : "to";
+    const displayValue = suggestion.type === "refine_query"
+      ? `"${suggestion.value}" → "${suggestion.replacement}"` : `'${suggestion.value}'`;
     vscode.window.showInformationMessage(
-      `${actionVerb} '${suggestion.value}' ${preposition} ${suggestion.yamlKey} in ${suggestion.yamlFile} — ${suggestion.impact.fp_removed} false positives will be filtered on next run`,
+      `${actionVerb} ${displayValue} ${preposition} ${suggestion.yamlKey} in ${suggestion.yamlFile} — ${suggestion.impact.fp_removed} false positives will be filtered on next run`,
     );
     return true;
   } catch (err) {

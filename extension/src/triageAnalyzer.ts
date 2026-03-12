@@ -4,11 +4,13 @@ import { PageResult, TriageState, TriageDecision } from "./resultsProvider";
 
 export interface TriageSuggestion {
   id: string;
-  type: "exclude_repo" | "url_exclusion" | "content_exclusion" | "remove_allowed_repo";
+  type: "exclude_repo" | "url_exclusion" | "content_exclusion" | "remove_allowed_repo" | "refine_query" | "remove_query";
   description: string;
   yamlFile: "scenario.yaml" | "strategy.yaml";
   yamlKey: string;
   value: string;
+  /** For refine_query: the narrowed replacement query */
+  replacement?: string;
   impact: {
     fp_removed: number;
     valid_at_risk: number;
@@ -35,6 +37,7 @@ export interface ScenarioConfig {
   allowed_repos: string[];
   hard_exclusion_url_regex: string[];
   hard_exclusion_repo_regex: string[];
+  queries: string[];
 }
 
 // Segments that are too generic to be useful exclusion patterns
@@ -85,7 +88,10 @@ export function analyzeTriage(
   // Step 4: Allowed repos pruning
   analyzeAllowedRepos(fpResults, validResults, scenarioConfig, suggestions, coveredFpUrls);
 
-  // Step 5: Score and rank
+  // Step 5: Query refinement analysis
+  analyzeQueries(fpResults, validResults, scenarioConfig, suggestions, coveredFpUrls);
+
+  // Step 6: Score and rank
   rankSuggestions(suggestions);
 
   // Step 6: Identify remaining FPs
@@ -379,7 +385,173 @@ function analyzeAllowedRepos(
   }
 }
 
-// ── Step 5: Ranking ──────────────────────────────────────────────────
+// ── Step 5: Query refinement analysis ────────────────────────────────
+
+// Words too common to be useful as distinguishing keywords
+const STOP_WORDS = new Set([
+  "the", "a", "an", "is", "are", "was", "were", "be", "been", "being",
+  "in", "on", "at", "to", "for", "of", "with", "by", "from", "as",
+  "and", "or", "not", "no", "but", "if", "this", "that", "it", "its",
+  "how", "what", "when", "where", "who", "which", "than", "then",
+  "can", "will", "do", "does", "did", "has", "have", "had", "may",
+  "use", "using", "used", "get", "set", "new", "see", "also",
+  "about", "more", "your", "you", "we", "our", "their",
+  "microsoft", "docs", "learn", "github", "com", "blob", "main",
+  "md", "yml", "json", "xml", "html", "txt", "readme",
+]);
+
+/**
+ * Analyze which search queries are generating disproportionately many false
+ * positives. Suggests removing unproductive queries or narrowing them by
+ * identifying distinguishing keywords that separate FPs from valid results.
+ */
+function analyzeQueries(
+  fpResults: PageResult[],
+  validResults: PageResult[],
+  scenarioConfig: ScenarioConfig,
+  suggestions: TriageSuggestion[],
+  coveredFpUrls: Set<string>,
+): void {
+  if (scenarioConfig.queries.length === 0) { return; }
+
+  // For each query, count how many FPs vs valids it likely matched.
+  // A query "matched" a result if the query terms appear in the URL or title.
+  const queryFps = new Map<string, PageResult[]>();
+  const queryValids = new Map<string, PageResult[]>();
+
+  for (const query of scenarioConfig.queries) {
+    const qLower = query.toLowerCase();
+    const qTerms = qLower.split(/\s+/).filter((t) => t.length > 1);
+
+    const matchesFp: PageResult[] = [];
+    const matchesValid: PageResult[] = [];
+
+    for (const r of fpResults) {
+      const text = `${r.url} ${r.title ?? ""}`.toLowerCase();
+      if (qTerms.every((t) => text.includes(t))) {
+        matchesFp.push(r);
+      }
+    }
+    for (const r of validResults) {
+      const text = `${r.url} ${r.title ?? ""}`.toLowerCase();
+      if (qTerms.every((t) => text.includes(t))) {
+        matchesValid.push(r);
+      }
+    }
+
+    queryFps.set(query, matchesFp);
+    queryValids.set(query, matchesValid);
+  }
+
+  // Suggest removing queries that produce only FPs
+  for (const query of scenarioConfig.queries) {
+    const fps = queryFps.get(query) ?? [];
+    const valids = queryValids.get(query) ?? [];
+
+    if (fps.length >= 2 && valids.length === 0) {
+      // This query produces only FPs — suggest removal
+      suggestions.push({
+        id: "",
+        type: "remove_query",
+        description: `Remove query "${query}" — all ${fps.length} matches are false positives`,
+        yamlFile: "scenario.yaml",
+        yamlKey: "search.github.queries",
+        value: query,
+        impact: {
+          fp_removed: fps.length,
+          valid_at_risk: 0,
+          fp_urls: fps.map((r) => r.url),
+          valid_urls: [],
+        },
+        confidence: "high",
+        safe: true,
+      });
+      for (const r of fps) { coveredFpUrls.add(r.url); }
+    }
+  }
+
+  // For queries that produce a mix, find distinguishing keywords in FP
+  // titles/URLs that don't appear in valid results — suggest as narrowing terms
+  for (const query of scenarioConfig.queries) {
+    const fps = queryFps.get(query) ?? [];
+    const valids = queryValids.get(query) ?? [];
+
+    if (fps.length < 3 || valids.length === 0) { continue; }
+    const fpRate = fps.length / (fps.length + valids.length);
+    if (fpRate < 0.5) { continue; } // Only refine queries that are mostly FP
+
+    // Extract keywords from FP titles/paths that distinguish them from valids
+    const fpKeywords = extractKeywords(fps);
+    const validKeywords = extractKeywords(valids);
+
+    // Find terms frequent in FPs but absent or rare in valids
+    for (const [keyword, fpCount] of fpKeywords) {
+      const validCount = validKeywords.get(keyword) ?? 0;
+      // Keyword appears in most FPs but very few valids
+      if (fpCount >= Math.min(fps.length * 0.6, 5) && validCount <= 1) {
+        const narrowedFps = fps.filter((r) => {
+          const text = `${r.url} ${r.title ?? ""}`.toLowerCase();
+          return text.includes(keyword);
+        });
+        const narrowedValids = valids.filter((r) => {
+          const text = `${r.url} ${r.title ?? ""}`.toLowerCase();
+          return text.includes(keyword);
+        });
+
+        if (narrowedFps.length >= 3 && narrowedValids.length <= 1) {
+          suggestions.push({
+            id: "",
+            type: "refine_query",
+            description: `Narrow query "${query}" — keyword "${keyword}" appears in ${narrowedFps.length} FPs but only ${narrowedValids.length} valid`,
+            yamlFile: "scenario.yaml",
+            yamlKey: "search.github.queries",
+            value: query,
+            replacement: `${query} NOT ${keyword}`,
+            impact: {
+              fp_removed: narrowedFps.length,
+              valid_at_risk: narrowedValids.length,
+              fp_urls: narrowedFps.map((r) => r.url),
+              valid_urls: narrowedValids.map((r) => r.url),
+            },
+            confidence: narrowedValids.length === 0 ? "high" : "medium",
+            safe: narrowedValids.length === 0,
+          });
+          // Don't mark as covered — these are refinement suggestions, not exclusions
+          break; // One refinement per query to avoid noise
+        }
+      }
+    }
+  }
+}
+
+/**
+ * Extract meaningful keywords from result titles and URL paths.
+ * Returns a map of keyword → count of results containing it.
+ */
+function extractKeywords(results: PageResult[]): Map<string, number> {
+  const keywords = new Map<string, number>();
+  for (const r of results) {
+    // Combine title and URL path, split into words
+    const title = r.title ?? "";
+    let urlPath = "";
+    try { urlPath = new URL(r.url).pathname; } catch { /* ignore */ }
+
+    const text = `${title} ${urlPath.replace(/[/\-_.]/g, " ")}`;
+    const words = text.toLowerCase().split(/\s+/)
+      .filter((w) => w.length > 2)
+      .filter((w) => !STOP_WORDS.has(w))
+      .filter((w) => !/^\d+$/.test(w));
+
+    // Deduplicate per result
+    const unique = new Set(words);
+    for (const word of unique) {
+      keywords.set(word, (keywords.get(word) ?? 0) + 1);
+    }
+  }
+  return keywords;
+}
+
+// ── Step 6: Ranking ──────────────────────────────────────────────────
 
 function rankSuggestions(suggestions: TriageSuggestion[]): void {
   // Sort: safe first, then by fp_removed descending
@@ -394,6 +566,8 @@ function rankSuggestions(suggestions: TriageSuggestion[]): void {
     const prefix = s.type === "exclude_repo" ? "repo"
       : s.type === "url_exclusion" ? "url"
       : s.type === "remove_allowed_repo" ? "allow"
+      : s.type === "remove_query" ? "qrm"
+      : s.type === "refine_query" ? "qref"
       : "content";
     counters[prefix] = (counters[prefix] ?? 0) + 1;
     s.id = `${prefix}-${counters[prefix]}`;
