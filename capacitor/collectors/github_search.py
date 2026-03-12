@@ -309,8 +309,13 @@ class GitHubSearchCollector(BaseCollector):
         if allowed_repos:
             self.allowed_repos = {r.lower() for r in allowed_repos}
         self.dry_run = dry_run
-        # date_filter: {"after": "YYYY-MM-DD", "before": "YYYY-MM-DD", "mode": "exclude"|"flag"}
+        # date_filter: {"after": "MM/DD/YYYY" or "YYYY-MM-DD", "before": ..., "mode": "exclude"|"flag"}
         self.date_filter = date_filter or {}
+        # Normalize config dates so users can write either MM/DD/YYYY or YYYY-MM-DD
+        for key in ("after", "before"):
+            raw = self.date_filter.get(key)
+            if raw:
+                self.date_filter[key] = _parse_ms_date(str(raw)) or str(raw)
 
     # ── public API ────────────────────────────────────────────────
 
