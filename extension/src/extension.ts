@@ -5,6 +5,7 @@ import { PipelineRunner } from "./runner";
 import { ScenarioWizardPanel } from "./wizardPanel";
 import { ScenarioProvider, ScenarioItem } from "./scenarioProvider";
 import { showSetupReport, activationCheck } from "./setupChecker";
+import { analyzeTriage, TriageAnalysis, TriageSuggestion, ScenarioConfig } from "./triageAnalyzer";
 
 const OUTPUT_CHANNEL_NAME = "Docs Capacitor";
 
@@ -316,104 +317,32 @@ export function activate(context: vscode.ExtensionContext): void {
 
   // --- Results: Triage - Suggest Improvements ---
   context.subscriptions.push(
-    vscode.commands.registerCommand("docs-capacitor.triageSuggest", () => {
+    vscode.commands.registerCommand("docs-capacitor.triageSuggest", async () => {
+      const results = resultsProvider.getResults();
       const triageState = resultsProvider.getTriageState();
       const scenarioName = resultsProvider.getActiveScenario() ?? "unknown";
 
-      const fpUrls = Object.entries(triageState.decisions)
-        .filter(([, d]) => d === "false_positive" || d === "ignore_repo")
-        .map(([url]) => url);
-
-      if (fpUrls.length === 0 && triageState.ignored_repos.length === 0) {
-        vscode.window.showInformationMessage("No false positives or ignored repos to analyze. Triage some results first.");
+      // Check we have triage decisions
+      const hasDecisions = Object.keys(triageState.decisions).length > 0;
+      if (!hasDecisions) {
+        vscode.window.showInformationMessage("No triage decisions yet. Mark some results as valid or false positive first.");
         return;
       }
 
-      // Group false positive URLs by common path segments
-      const pathGroups: Record<string, string[]> = {};
-      for (const url of fpUrls) {
-        try {
-          const u = new URL(url);
-          const segments = u.pathname.split("/").filter(Boolean);
-          // Use the first 2-3 path segments as the group key
-          const key = segments.length >= 2 ? `/${segments.slice(0, 2).join("/")}` : u.pathname;
-          if (!pathGroups[key]) { pathGroups[key] = []; }
-          pathGroups[key].push(url);
-        } catch {
-          if (!pathGroups["other"]) { pathGroups["other"] = []; }
-          pathGroups["other"].push(url);
-        }
+      // Load scenario config
+      const scenarioDir = findScenarioDir(scenarioName);
+      const scenarioConfig = loadScenarioConfig(scenarioDir);
+
+      // Phase 1: Analyze
+      const analysis = analyzeTriage(results, triageState, scenarioConfig);
+
+      if (analysis.suggestions.length === 0 && analysis.remaining_fps.length === 0) {
+        vscode.window.showInformationMessage("No improvement suggestions — precision looks good!");
+        return;
       }
 
-      // Read current scenario config if available
-      let scenarioExcludedRepos = "(not found)";
-      let strategyHardExclusions = "(not found)";
-      const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-      if (workspaceRoot) {
-        const fsModule = require("fs") as typeof import("fs");
-        const yaml = require("js-yaml");
-        // Try to find scenario.yaml
-        const scenarioDir = path.join(workspaceRoot, "scenarios", scenarioName);
-        const scenarioYaml = path.join(scenarioDir, "scenario.yaml");
-        if (fsModule.existsSync(scenarioYaml)) {
-          try {
-            const doc = yaml.load(fsModule.readFileSync(scenarioYaml, "utf-8")) as Record<string, unknown>;
-            scenarioExcludedRepos = JSON.stringify(doc?.["excluded_repos"] ?? [], null, 2);
-          } catch { /* ignore */ }
-        }
-        // Try to find strategy.yaml
-        const strategyYaml = path.join(scenarioDir, "strategy.yaml");
-        if (fsModule.existsSync(strategyYaml)) {
-          try {
-            const doc = yaml.load(fsModule.readFileSync(strategyYaml, "utf-8")) as Record<string, unknown>;
-            const hardExclusions = (doc as Record<string, unknown>)?.["hard_exclusions"];
-            strategyHardExclusions = JSON.stringify(hardExclusions ?? {}, null, 2);
-          } catch { /* ignore */ }
-        }
-      }
-
-      // Build the prompt
-      const promptParts: string[] = [
-        `I'm tuning a docs freshness scenario called "${scenarioName}". Here are results I marked as false positives:`,
-        "",
-      ];
-
-      if (triageState.ignored_repos.length > 0) {
-        promptParts.push("**Repos to exclude:**");
-        for (const repo of triageState.ignored_repos) {
-          promptParts.push(`- ${repo}`);
-        }
-        promptParts.push("");
-      }
-
-      promptParts.push("**False positive URLs (grouped by path pattern):**");
-      for (const [pattern, urls] of Object.entries(pathGroups)) {
-        promptParts.push(`\n_Pattern: ${pattern}_ (${urls.length} URLs)`);
-        for (const url of urls.slice(0, 5)) {
-          promptParts.push(`- ${url}`);
-        }
-        if (urls.length > 5) {
-          promptParts.push(`- ... and ${urls.length - 5} more`);
-        }
-      }
-
-      promptParts.push("");
-      promptParts.push(`Current scenario.yaml excluded_repos: ${scenarioExcludedRepos}`);
-      promptParts.push(`Current strategy.yaml hard_exclusions: ${strategyHardExclusions}`);
-      promptParts.push("");
-      promptParts.push("Please suggest specific changes to my scenario.yaml and strategy.yaml to exclude these false positives while keeping valid results.");
-
-      const prompt = promptParts.join("\n");
-
-      vscode.commands.executeCommand("workbench.action.chat.open", { query: prompt }).then(
-        undefined,
-        () => {
-          vscode.env.clipboard.writeText(prompt);
-          vscode.window.showInformationMessage(
-            "Copilot Chat not available. Suggestions prompt copied to clipboard.",
-          );
-        },
-      );
+      // Phase 2: Show QuickPick loop
+      await showTriageQuickPick(analysis, scenarioName, scenarioDir, scenarioConfig, results, triageState);
     }),
   );
 
@@ -575,4 +504,345 @@ export function activate(context: vscode.ExtensionContext): void {
 
 export function deactivate(): void {
   outputChannel?.dispose();
+}
+
+// ── Triage suggestion helpers ────────────────────────────────────────
+
+function findScenarioDir(scenarioName: string): string | undefined {
+  const fs = require("fs") as typeof import("fs");
+
+  for (const folder of vscode.workspace.workspaceFolders ?? []) {
+    const wsRoot = folder.uri.fsPath;
+    // Direct child: <root>/<scenarioName>/scenario.yaml
+    const direct = path.join(wsRoot, scenarioName);
+    if (fs.existsSync(path.join(direct, "scenario.yaml"))) { return direct; }
+    // Under scenarios/: <root>/scenarios/<scenarioName>/scenario.yaml
+    const sub = path.join(wsRoot, "scenarios", scenarioName);
+    if (fs.existsSync(path.join(sub, "scenario.yaml"))) { return sub; }
+  }
+
+  const scenarioPaths = vscode.workspace
+    .getConfiguration("docs-capacitor")
+    .get<string[]>("scenarioPaths", []);
+  for (const sp of scenarioPaths) {
+    const resolved = path.isAbsolute(sp)
+      ? sp
+      : path.join(vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? "", sp);
+    const dir = path.join(resolved, scenarioName);
+    if (fs.existsSync(path.join(dir, "scenario.yaml"))) { return dir; }
+    // sp itself might be the scenario dir
+    if (path.basename(resolved) === scenarioName && fs.existsSync(path.join(resolved, "scenario.yaml"))) {
+      return resolved;
+    }
+  }
+  return undefined;
+}
+
+function loadScenarioConfig(scenarioDir: string | undefined): ScenarioConfig {
+  const empty: ScenarioConfig = {
+    excluded_repos: [],
+    allowed_repos: [],
+    hard_exclusion_url_regex: [],
+    hard_exclusion_repo_regex: [],
+  };
+  if (!scenarioDir) { return empty; }
+
+  const fs = require("fs") as typeof import("fs");
+  const yaml = require("js-yaml");
+
+  const config = { ...empty };
+
+  // Load scenario.yaml
+  const scenarioPath = path.join(scenarioDir, "scenario.yaml");
+  if (fs.existsSync(scenarioPath)) {
+    try {
+      const doc = yaml.load(fs.readFileSync(scenarioPath, "utf-8")) as Record<string, unknown>;
+      const search = doc?.search as Record<string, unknown> | undefined;
+      const github = search?.github as Record<string, unknown> | undefined;
+      if (Array.isArray(github?.excluded_repos)) {
+        config.excluded_repos = github.excluded_repos as string[];
+      }
+      if (Array.isArray(github?.allowed_repos)) {
+        config.allowed_repos = github.allowed_repos as string[];
+      }
+    } catch { /* ignore parse errors */ }
+  }
+
+  // Load strategy.yaml
+  const strategyPath = path.join(scenarioDir, "strategy.yaml");
+  if (fs.existsSync(strategyPath)) {
+    try {
+      const doc = yaml.load(fs.readFileSync(strategyPath, "utf-8")) as Record<string, unknown>;
+      const hard = doc?.hard_exclusions as Record<string, unknown> | undefined;
+      if (Array.isArray(hard?.url_regex)) {
+        config.hard_exclusion_url_regex = hard.url_regex as string[];
+      }
+      if (Array.isArray(hard?.repo_regex)) {
+        config.hard_exclusion_repo_regex = hard.repo_regex as string[];
+      }
+    } catch { /* ignore parse errors */ }
+  }
+
+  return config;
+}
+
+interface QuickPickSuggestionItem extends vscode.QuickPickItem {
+  suggestion?: TriageSuggestion;
+  action?: "copilot_chat";
+}
+
+async function showTriageQuickPick(
+  analysis: TriageAnalysis,
+  scenarioName: string,
+  scenarioDir: string | undefined,
+  scenarioConfig: ScenarioConfig,
+  results: PageResult[],
+  triageState: import("./resultsProvider").TriageState,
+): Promise<void> {
+  const { summary, suggestions } = analysis;
+  let remainingFps = [...analysis.remaining_fps];
+
+  // Loop so user can apply multiple suggestions
+  while (true) {
+    const precisionPct = Math.round(summary.current_precision * 100);
+    const items: QuickPickSuggestionItem[] = [];
+
+    // Header item (not selectable)
+    items.push({
+      label: `$(target) Precision: ${precisionPct}% (${summary.valid_count} valid, ${summary.fp_count} false positive)`,
+      kind: vscode.QuickPickItemKind.Separator,
+    });
+
+    // Suggestion items
+    const activeSuggestions = suggestions.filter((s) => s.impact.fp_removed > 0);
+    for (const s of activeSuggestions) {
+      const icon = s.safe ? "$(check)" : "$(warning)";
+      const risk = s.safe ? "" : `, ${s.impact.valid_at_risk} valid at risk`;
+      items.push({
+        label: `${icon} ${s.description}`,
+        detail: `    ${s.yamlFile} → ${s.yamlKey} — removes ${s.impact.fp_removed} FPs${risk}`,
+        description: s.confidence === "high" ? "" : `(${s.confidence} confidence)`,
+        suggestion: s,
+      });
+    }
+
+    // Separator before Copilot Chat option
+    if (remainingFps.length > 0) {
+      items.push({
+        label: "Copilot Chat",
+        kind: vscode.QuickPickItemKind.Separator,
+      });
+      items.push({
+        label: `$(comment-discussion) Open Copilot Chat for ${remainingFps.length} remaining FPs without clear patterns`,
+        action: "copilot_chat",
+      });
+    }
+
+    if (activeSuggestions.length === 0 && remainingFps.length === 0) {
+      vscode.window.showInformationMessage("All suggestions applied or no more improvements found.");
+      return;
+    }
+
+    const picked = await vscode.window.showQuickPick(items, {
+      title: `Precision Tuning — ${scenarioName}`,
+      placeHolder: "Select a suggestion to apply",
+      canPickMany: false,
+    });
+
+    if (!picked) { return; } // User cancelled
+
+    if (picked.action === "copilot_chat") {
+      openCopilotChatForRemainingFps(
+        remainingFps, scenarioName, summary, scenarioDir, results, triageState,
+      );
+      return;
+    }
+
+    if (picked.suggestion) {
+      const applied = await applySuggestion(picked.suggestion, scenarioDir);
+      if (applied) {
+        // Remove this suggestion and update remaining FPs
+        const idx = suggestions.indexOf(picked.suggestion);
+        if (idx !== -1) { suggestions.splice(idx, 1); }
+        // FP URLs handled by this suggestion are no longer "remaining"
+        const handled = new Set(picked.suggestion.impact.fp_urls);
+        remainingFps = remainingFps.filter((u) => !handled.has(u));
+      }
+    }
+  }
+}
+
+async function applySuggestion(
+  suggestion: TriageSuggestion,
+  scenarioDir: string | undefined,
+): Promise<boolean> {
+  if (!scenarioDir) {
+    vscode.window.showErrorMessage("Cannot find scenario directory to apply changes.");
+    return false;
+  }
+
+  const fs = require("fs") as typeof import("fs");
+  const yaml = require("js-yaml");
+  const filePath = path.join(scenarioDir, suggestion.yamlFile);
+
+  if (!fs.existsSync(filePath)) {
+    vscode.window.showErrorMessage(`File not found: ${filePath}`);
+    return false;
+  }
+
+  try {
+    const raw = fs.readFileSync(filePath, "utf-8");
+    const doc = yaml.load(raw) as Record<string, unknown>;
+
+    if (suggestion.type === "remove_allowed_repo") {
+      // Remove from allowed_repos list
+      const arr = getNestedArray(doc, suggestion.yamlKey);
+      if (arr) {
+        const idx = arr.findIndex(
+          (v: string) => v.toLowerCase() === suggestion.value.toLowerCase(),
+        );
+        if (idx !== -1) { arr.splice(idx, 1); }
+      }
+    } else {
+      // Add to the target array
+      const arr = ensureNestedArray(doc, suggestion.yamlKey);
+      if (!arr.includes(suggestion.value)) {
+        arr.push(suggestion.value);
+      }
+    }
+
+    const output = yaml.dump(doc, { lineWidth: -1, quotingType: "'", forceQuotes: false });
+    fs.writeFileSync(filePath, output, "utf-8");
+
+    const actionVerb = suggestion.type === "remove_allowed_repo" ? "Removed" : "Added";
+    const preposition = suggestion.type === "remove_allowed_repo" ? "from" : "to";
+    vscode.window.showInformationMessage(
+      `${actionVerb} '${suggestion.value}' ${preposition} ${suggestion.yamlKey} in ${suggestion.yamlFile} — ${suggestion.impact.fp_removed} false positives will be filtered on next run`,
+    );
+    return true;
+  } catch (err) {
+    vscode.window.showErrorMessage(`Failed to update ${suggestion.yamlFile}: ${err}`);
+    return false;
+  }
+}
+
+function getNestedArray(obj: Record<string, unknown>, keyPath: string): string[] | undefined {
+  const keys = keyPath.split(".");
+  let current: unknown = obj;
+  for (const key of keys) {
+    if (current === null || current === undefined || typeof current !== "object") {
+      return undefined;
+    }
+    current = (current as Record<string, unknown>)[key];
+  }
+  return Array.isArray(current) ? current as string[] : undefined;
+}
+
+function ensureNestedArray(obj: Record<string, unknown>, keyPath: string): string[] {
+  const keys = keyPath.split(".");
+  let current: Record<string, unknown> = obj;
+  for (let i = 0; i < keys.length - 1; i++) {
+    if (current[keys[i]] === undefined || current[keys[i]] === null || typeof current[keys[i]] !== "object") {
+      current[keys[i]] = {};
+    }
+    current = current[keys[i]] as Record<string, unknown>;
+  }
+  const lastKey = keys[keys.length - 1];
+  if (!Array.isArray(current[lastKey])) {
+    current[lastKey] = [];
+  }
+  return current[lastKey] as string[];
+}
+
+function openCopilotChatForRemainingFps(
+  remainingFps: string[],
+  scenarioName: string,
+  summary: TriageAnalysis["summary"],
+  scenarioDir: string | undefined,
+  results: PageResult[],
+  triageState: import("./resultsProvider").TriageState,
+): void {
+  const fs = require("fs") as typeof import("fs");
+  const yaml = require("js-yaml");
+
+  // Gather valid URLs for context
+  const validUrls = Object.entries(triageState.decisions)
+    .filter(([, d]) => d === "valid")
+    .map(([url]) => url);
+
+  // Group remaining FPs by repo for structure
+  const fpsByRepo: Record<string, string[]> = {};
+  for (const url of remainingFps) {
+    const result = results.find((r) => r.url === url);
+    const repo = result?.repo ?? "unknown";
+    if (!fpsByRepo[repo]) { fpsByRepo[repo] = []; }
+    fpsByRepo[repo].push(url);
+  }
+
+  // Load current config for context
+  let scenarioYamlContent = "";
+  let strategyYamlContent = "";
+  if (scenarioDir) {
+    try { scenarioYamlContent = fs.readFileSync(path.join(scenarioDir, "scenario.yaml"), "utf-8"); } catch { /* */ }
+    try { strategyYamlContent = fs.readFileSync(path.join(scenarioDir, "strategy.yaml"), "utf-8"); } catch { /* */ }
+  }
+
+  const precisionPct = Math.round(summary.current_precision * 100);
+  const parts: string[] = [
+    `I'm tuning retrieval precision for the "${scenarioName}" docs freshness scenario.`,
+    `Current precision: ${precisionPct}% (${summary.valid_count} valid, ${summary.fp_count} false positive).`,
+    "",
+    `These ${remainingFps.length} false positive URLs don't match any simple repo or path pattern. I need specific regex exclusion rules.`,
+    "",
+    "**Remaining false positive URLs (grouped by repo):**",
+  ];
+
+  for (const [repo, urls] of Object.entries(fpsByRepo)) {
+    parts.push(`\n_${repo}:_`);
+    for (const url of urls.slice(0, 10)) {
+      parts.push(`- ${url}`);
+    }
+    if (urls.length > 10) {
+      parts.push(`- ... and ${urls.length - 10} more`);
+    }
+  }
+
+  parts.push("");
+  parts.push("**Valid URLs to PRESERVE (do not exclude these):**");
+  for (const url of validUrls.slice(0, 15)) {
+    parts.push(`- ${url}`);
+  }
+  if (validUrls.length > 15) {
+    parts.push(`- ... and ${validUrls.length - 15} more`);
+  }
+
+  if (scenarioYamlContent) {
+    parts.push("");
+    parts.push("**Current scenario.yaml:**");
+    parts.push("```yaml");
+    parts.push(scenarioYamlContent.trim());
+    parts.push("```");
+  }
+  if (strategyYamlContent) {
+    parts.push("");
+    parts.push("**Current strategy.yaml:**");
+    parts.push("```yaml");
+    parts.push(strategyYamlContent.trim());
+    parts.push("```");
+  }
+
+  parts.push("");
+  parts.push("Suggest specific `hard_exclusions.url_regex` patterns for strategy.yaml that would exclude the false positives above WITHOUT matching any of the valid URLs. For each pattern, show which FP URLs it matches.");
+
+  const prompt = parts.join("\n");
+
+  vscode.commands.executeCommand("workbench.action.chat.open", { query: prompt }).then(
+    undefined,
+    () => {
+      vscode.env.clipboard.writeText(prompt);
+      vscode.window.showInformationMessage(
+        "Copilot Chat not available. Suggestions prompt copied to clipboard.",
+      );
+    },
+  );
 }
