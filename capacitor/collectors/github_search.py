@@ -316,6 +316,7 @@ class GitHubSearchCollector(BaseCollector):
             raw = self.date_filter.get(key)
             if raw:
                 self.date_filter[key] = _parse_ms_date(str(raw)) or str(raw)
+        self.date_skipped = 0  # count of articles excluded by date filter
 
     # ── public API ────────────────────────────────────────────────
 
@@ -366,6 +367,7 @@ class GitHubSearchCollector(BaseCollector):
                         failed_date_check = True
 
                 if failed_date_check and filter_mode == "exclude":
+                    self.date_skipped += 1
                     continue
 
                 if ms_date:
@@ -456,7 +458,6 @@ class GitHubSearchCollector(BaseCollector):
 
         # Fetch phase
         pages: List[Dict[str, Any]] = []
-        date_skipped = 0
         for i, hit in enumerate(hits):
             content = _gh_api_file(hit["repo"], hit["path"])
             if content:
@@ -476,7 +477,7 @@ class GitHubSearchCollector(BaseCollector):
                         failed_date_check = True
 
                 if failed_date_check and filter_mode == "exclude":
-                    date_skipped += 1
+                    self.date_skipped += 1
                     continue
 
                 page: Dict[str, Any] = {
@@ -495,9 +496,9 @@ class GitHubSearchCollector(BaseCollector):
             if (i + 1) % 10 == 0:
                 logger.info("Fetched %d/%d files", i + 1, len(hits))
 
-        if date_skipped:
-            logger.info("Skipped %d files outside date range", date_skipped)
-            print(f"  Skipped {date_skipped} files outside date range")
+        if self.date_skipped:
+            logger.info("Skipped %d files outside date range", self.date_skipped)
+            print(f"  Skipped {self.date_skipped} files outside date range")
 
         # Write cache
         if cache_path and pages:

@@ -73,10 +73,12 @@ class JSONReporter(BaseReporter):
                 "date_flag": row.get("date_flag", ""),
             })
 
+        date_skipped = kwargs.get("date_skipped", 0)
         metadata = {
             "actionable": len(output),
             "non_actionable": skipped,
-            "total": len(output) + skipped,
+            "date_excluded": date_skipped,
+            "total": len(output) + skipped + date_skipped,
         }
 
         json_path.write_text(

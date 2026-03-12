@@ -199,6 +199,7 @@ class Pipeline:
         sources = sources or ["github", "learn"]
         self.pages = []
         self._seen_urls = set()
+        self._date_skipped = 0
         dedup_count = 0
         for source in sources:
             print(f"Collecting from: {source}")
@@ -215,6 +216,9 @@ class Pipeline:
                 print(f"  {source} collector not available, skipping")
                 continue
             pages = list(collector.collect(pages_jsonl=pages_jsonl) if source == "github" else collector.collect())
+            # Track date-excluded count from GitHub collector
+            if source == "github" and hasattr(collector, "date_skipped"):
+                self._date_skipped += collector.date_skipped
             added = 0
             for page in pages:
                 raw_url = page.get("url") or page.get("file") or ""
@@ -288,6 +292,7 @@ class Pipeline:
                 strategy=self.strategy,
                 report_title=report_title,
                 section_key=section_key,
+                date_skipped=getattr(self, "_date_skipped", 0),
             )
             print(f"Report written: {path}")
             paths.append(path)

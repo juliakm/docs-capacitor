@@ -180,7 +180,7 @@ export class ResultsProvider implements vscode.TreeDataProvider<ResultItem> {
   private showUntriagedOnly = false;
   private treeView: vscode.TreeView<ResultItem> | undefined;
   /** Counts from the JSON meta block. */
-  private meta: { actionable: number; non_actionable: number; total: number } | undefined;
+  private meta: { actionable: number; non_actionable: number; date_excluded: number; total: number } | undefined;
   /** The scenario whose results are currently displayed. */
   private activeScenario: string | undefined;
 
@@ -505,6 +505,12 @@ export class ResultsProvider implements vscode.TreeDataProvider<ResultItem> {
     if (triaged > 0) {
       parts.push(`(${triaged} triaged, ${remaining} remaining)`);
     }
+    // Show total scanned including date-excluded and non-actionable
+    if (this.meta) {
+      const totalScanned = this.meta.total;
+      const datePart = this.meta.date_excluded > 0 ? `, ${this.meta.date_excluded} date-excluded` : "";
+      parts.push(`of ${totalScanned} scanned${datePart}`);
+    }
     const scenarioNote = this.activeScenario ? ` [${this.activeScenario}]` : "";
     const filterNote = this.activeFilter ? ` (filtered: ${this.activeFilter})`
       : this.showUntriagedOnly ? " (untriaged only)" : "";
@@ -608,6 +614,7 @@ export class ResultsProvider implements vscode.TreeDataProvider<ResultItem> {
           this.meta = {
             actionable: Number(m["actionable"] ?? 0),
             non_actionable: Number(m["non_actionable"] ?? 0),
+            date_excluded: Number(m["date_excluded"] ?? 0),
             total: Number(m["total"] ?? 0),
           };
         }
