@@ -197,20 +197,26 @@ def _gh_search_code(
     return all_hits
 
 
-def _gh_api_file(repo: str, path: str) -> Optional[str]:
-    """Fetch raw file content from GitHub via ``gh api`` (base64 decode)."""
+def _gh_api_file(repo: str, path: str) -> Optional[Dict[str, str]]:
+    """Fetch file content and metadata from GitHub via ``gh api``.
+
+    Returns ``{"content": <text>, "html_url": <browser URL>}`` or *None*.
+    Using the API-provided ``html_url`` avoids hardcoding a branch name.
+    """
     api_path = f"/repos/{repo}/contents/{path}"
     cmd = [
         "gh", "api", api_path,
-        "--jq", ".content",
         "-H", "Accept: application/vnd.github.v3+json",
     ]
     result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
     if result.returncode != 0:
         return None
     try:
-        content_b64 = result.stdout.strip().replace("\n", "")
-        return base64.b64decode(content_b64).decode("utf-8")
+        data = json.loads(result.stdout)
+        content_b64 = (data.get("content") or "").replace("\n", "")
+        text = base64.b64decode(content_b64).decode("utf-8")
+        html_url = data.get("html_url", f"https://github.com/{repo}/blob/main/{path}")
+        return {"content": text, "html_url": html_url}
     except Exception:
         return None
 
@@ -459,8 +465,9 @@ class GitHubSearchCollector(BaseCollector):
         # Fetch phase
         pages: List[Dict[str, Any]] = []
         for i, hit in enumerate(hits):
-            content = _gh_api_file(hit["repo"], hit["path"])
-            if content:
+            file_data = _gh_api_file(hit["repo"], hit["path"])
+            if file_data:
+                content = file_data["content"]
                 # Extract ms.date from YAML front matter
                 ms_date_raw = _extract_ms_date(content)
                 ms_date = _parse_ms_date(ms_date_raw) if ms_date_raw else None
@@ -481,7 +488,7 @@ class GitHubSearchCollector(BaseCollector):
                     continue
 
                 page: Dict[str, Any] = {
-                    "url": f"https://github.com/{hit['repo']}/blob/main/{hit['path']}",
+                    "url": file_data["html_url"],
                     "repo": hit["repo"],
                     "text": content,
                 }
