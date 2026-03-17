@@ -414,8 +414,10 @@ export function activate(context: vscode.ExtensionContext): void {
 
   // --- Run Freshness Check ---
   context.subscriptions.push(
-    vscode.commands.registerCommand("docs-capacitor.check", async (scenarioPathArg?: string) => {
-      const scenarioPath = scenarioPathArg ?? await pickScenario("Select a scenario to check");
+    vscode.commands.registerCommand("docs-capacitor.check", async (scenarioPathArg?: string | unknown) => {
+      // When invoked from a tree-view toolbar, VS Code passes the tree item — not a string.
+      const rawArg = typeof scenarioPathArg === "string" ? scenarioPathArg : undefined;
+      const scenarioPath = rawArg ?? await pickScenario("Select a scenario to check");
       if (!scenarioPath) {
         return;
       }
@@ -449,8 +451,9 @@ export function activate(context: vscode.ExtensionContext): void {
 
   // --- Validate Scenario ---
   context.subscriptions.push(
-    vscode.commands.registerCommand("docs-capacitor.validate", async (scenarioPathArg?: string) => {
-      const scenarioPath = scenarioPathArg ?? await pickScenario("Select a scenario to validate");
+    vscode.commands.registerCommand("docs-capacitor.validate", async (scenarioPathArg?: string | unknown) => {
+      const rawArg = typeof scenarioPathArg === "string" ? scenarioPathArg : undefined;
+      const scenarioPath = rawArg ?? await pickScenario("Select a scenario to validate");
       if (!scenarioPath) {
         return;
       }
