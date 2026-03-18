@@ -21,20 +21,31 @@ from capacitor.utils.release_notes import build_snapshot, fetch_page, extract_se
 
 
 def _get_github_token() -> str:
-    """Get GitHub token from env or fall back to ``gh auth token``."""
-    token = os.getenv("GITHUB_MODELS_TOKEN", "") or os.getenv("GITHUB_TOKEN", "")
+    """Get GitHub token from env or fall back to ``gh auth token``.
+
+    Checks GITHUB_MODELS_TOKEN and GITHUB_MODELS_USER first to support
+    using a separate GitHub account for Models API access.
+    """
+    token = os.getenv("GITHUB_MODELS_TOKEN", "")
     if token:
         return token
-    try:
-        result = subprocess.run(
-            ["gh", "auth", "token"],
-            capture_output=True, text=True, timeout=5,
-        )
-        if result.returncode == 0 and result.stdout.strip():
-            return result.stdout.strip()
-    except (FileNotFoundError, subprocess.TimeoutExpired):
-        pass
-    return ""
+    # Try gh auth token for a specific Models user, then the active user
+    models_user = os.getenv("GITHUB_MODELS_USER", "")
+    for cmd in (
+        ["gh", "auth", "token", "-u", models_user] if models_user else [],
+        ["gh", "auth", "token"],
+    ):
+        if not cmd:
+            continue
+        try:
+            result = subprocess.run(
+                cmd, capture_output=True, text=True, timeout=5,
+            )
+            if result.returncode == 0 and result.stdout.strip():
+                return result.stdout.strip()
+        except (FileNotFoundError, subprocess.TimeoutExpired):
+            pass
+    return os.getenv("GITHUB_TOKEN", "")
 
 
 class Pipeline:
