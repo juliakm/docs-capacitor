@@ -46,6 +46,7 @@ def main() -> None:
 @click.option("--area", multiple=True, help="Classification areas to check. Repeatable.")
 @click.option("--format", "formats", multiple=True, help="Output formats (markdown, csv). Repeatable.")
 @click.option("--pages-jsonl", default=None, help="Use pre-collected pages JSONL file.")
+@click.option("--local-path", default=None, help="Local directory to scan (adds 'local' source automatically).")
 def check(
     scenario: str,
     out: str,
@@ -54,12 +55,17 @@ def check(
     area: tuple[str, ...],
     formats: tuple[str, ...],
     pages_jsonl: Optional[str],
+    local_path: Optional[str],
 ) -> None:
     """Run the full freshness check pipeline."""
     config = _load_config(scenario)
     pipeline = Pipeline(config, out_dir=Path(out))
+    sources = list(source) or None
+    if local_path:
+        sources = ["local"]
+        pipeline.local_path_override = local_path
     reports = pipeline.run(
-        sources=list(source) or None,
+        sources=sources,
         detectors=list(detector) or None,
         areas=list(area) or None,
         formats=list(formats) or None,

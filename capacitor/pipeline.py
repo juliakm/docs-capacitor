@@ -105,11 +105,17 @@ class Pipeline:
         cls = COLLECTOR_REGISTRY.get("local")
         if not cls:
             return None
-        local_cfg = self.config.search.get("local", {})
-        root = local_cfg.get("root", ".")
-        if not Path(root).is_absolute():
-            root = str(self.config.scenario_dir / root)
-        glob_pattern = local_cfg.get("glob_pattern", "**/*.md")
+        # CLI --local-path override takes priority
+        override = getattr(self, "local_path_override", None)
+        if override:
+            root = override
+            glob_pattern = "**/*.md"
+        else:
+            local_cfg = self.config.search.get("local", {})
+            root = local_cfg.get("root", ".")
+            if not Path(root).is_absolute():
+                root = str(self.config.scenario_dir / root)
+            glob_pattern = local_cfg.get("glob_pattern", "**/*.md")
         return cls(root=root, glob_pattern=glob_pattern)
 
     def _build_regex_detector(self) -> Any:

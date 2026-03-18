@@ -26,6 +26,12 @@
         "icon": "$(play)"
       },
       {
+        "command": "docs-capacitor.deepScan",
+        "title": "Deep Scan Local Repo",
+        "category": "Docs Capacitor",
+        "icon": "$(search)"
+      },
+      {
         "command": "docs-capacitor.validate",
         "title": "Validate Scenario",
         "category": "Docs Capacitor"

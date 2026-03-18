@@ -62,6 +62,11 @@ export class PipelineRunner {
     return this.execute(args, "Freshness Check", options);
   }
 
+  runDeepScan(scenarioPath: string, outputDir: string, localPath: string, options?: RunOptions): Promise<RunResult> {
+    const args = ["-m", "capacitor", "check", "-s", scenarioPath, "-o", outputDir, "--local-path", localPath];
+    return this.execute(args, "Deep Scan", options);
+  }
+
   runValidate(scenarioPath: string, options?: RunOptions): Promise<RunResult> {
     const args = ["-m", "capacitor", "validate", "-s", scenarioPath];
     return this.execute(args, "Validate Scenario", options);

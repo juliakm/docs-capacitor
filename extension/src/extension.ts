@@ -449,6 +449,51 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
   );
 
+  // --- Deep Scan Local Repo ---
+  context.subscriptions.push(
+    vscode.commands.registerCommand("docs-capacitor.deepScan", async (scenarioPathArg?: string | unknown) => {
+      const rawArg = typeof scenarioPathArg === "string" ? scenarioPathArg : undefined;
+      const scenarioPath = rawArg ?? await pickScenario("Select a scenario for deep scan");
+      if (!scenarioPath) {
+        return;
+      }
+
+      const folderUri = await vscode.window.showOpenDialog({
+        canSelectFolders: true,
+        canSelectFiles: false,
+        canSelectMany: false,
+        openLabel: "Select repo folder to scan",
+      });
+      if (!folderUri || folderUri.length === 0) {
+        return;
+      }
+      const localPath = folderUri[0].fsPath;
+
+      statusBarItem.text = "$(sync~spin) Capacitor: Deep Scan…";
+      statusBarItem.tooltip = "Deep scan in progress — this may take a while";
+      statusBarItem.backgroundColor = new vscode.ThemeColor("statusBarItem.warningBackground");
+
+      const cwd = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? process.cwd();
+      const scenarioName = path.basename(path.dirname(scenarioPath));
+      const outputDir = path.join(cwd, "output", scenarioName);
+      const runner = createRunner();
+      const result = await runner.runDeepScan(scenarioPath, outputDir, localPath, { timeoutMs: getTimeoutMs() });
+
+      statusBarItem.backgroundColor = undefined;
+      if (result.success) {
+        const now = new Date().toLocaleTimeString();
+        statusBarItem.text = `$(beaker) Capacitor ✓ ${now}`;
+        statusBarItem.tooltip = `Deep scan: ${scenarioName} at ${now}`;
+        vscode.window.showInformationMessage(`✅ Deep scan complete for ${scenarioName} — see Results panel.`);
+        resultsProvider.loadScenario(scenarioName);
+      } else {
+        statusBarItem.text = "$(beaker) Capacitor ✗ Failed";
+        statusBarItem.tooltip = "Deep scan failed — click to retry";
+        vscode.window.showErrorMessage(`Deep scan failed (exit ${result.exitCode}). See Output panel for details.`);
+      }
+    }),
+  );
+
   // --- Validate Scenario ---
   context.subscriptions.push(
     vscode.commands.registerCommand("docs-capacitor.validate", async (scenarioPathArg?: string | unknown) => {
