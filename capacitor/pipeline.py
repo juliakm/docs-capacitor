@@ -137,6 +137,8 @@ class Pipeline:
             section_key=rn_cfg.get("section_key", "product_sections"),
             max_article_chars=llm_cfg.get("max_article_chars", 8000),
             rate_limit_rpm=llm_cfg.get("rate_limit_rpm", 10),
+            scope_product_patterns=self.config.scope_product_patterns,
+            scope_tool_patterns=self.config.scope_tool_patterns,
         )
 
     def _build_classifier(self, areas: list[str] | None = None) -> Any:

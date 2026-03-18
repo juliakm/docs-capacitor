@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -66,6 +67,22 @@ def is_relevant_page(
             return True
     # If no relevant patterns configured, accept all non-skipped pages
     return len(relevant_patterns) == 0
+
+
+def _matches_scope(
+    text: str,
+    product_patterns: List[str],
+    tool_patterns: List[str],
+) -> bool:
+    """Return True if page text mentions both the target product and tool."""
+    lowered = text.lower()
+    product_hit = not product_patterns or any(
+        re.search(p, lowered) for p in product_patterns
+    )
+    tool_hit = not tool_patterns or any(
+        re.search(p, lowered) for p in tool_patterns
+    )
+    return product_hit and tool_hit
 
 
 # ------------------------------------------------------------------
@@ -211,6 +228,8 @@ class LLMDetector(BaseDetector):
         section_key: str = "product_sections",
         max_article_chars: int = 8000,
         rate_limit_rpm: int = 10,
+        scope_product_patterns: List[str] | None = None,
+        scope_tool_patterns: List[str] | None = None,
     ):
         # Auto-detect provider if not explicitly set
         if provider:
@@ -240,6 +259,8 @@ class LLMDetector(BaseDetector):
         self.section_key = section_key
         self.max_article_chars = max_article_chars
         self.request_delay = 60.0 / rate_limit_rpm if rate_limit_rpm > 0 else 6.0
+        self.scope_product_patterns = scope_product_patterns or []
+        self.scope_tool_patterns = scope_tool_patterns or []
 
     def _is_configured(self) -> bool:
         try:
@@ -298,7 +319,21 @@ class LLMDetector(BaseDetector):
                 self.skip_url_patterns,
             )
         ]
-        print(f"  LLM conflict check: {len(relevant)} relevant pages ({len(pages) - len(relevant)} skipped)")
+        print(f"  LLM conflict check: {len(relevant)} URL-relevant pages ({len(pages) - len(relevant)} skipped by URL)")
+
+        # Scope pre-filter: only send pages to LLM that mention the target
+        # product AND tool, matching the classifier's scope check.
+        if self.scope_product_patterns or self.scope_tool_patterns:
+            before = len(relevant)
+            relevant = [
+                p for p in relevant
+                if _matches_scope(
+                    p.get("text", ""),
+                    self.scope_product_patterns,
+                    self.scope_tool_patterns,
+                )
+            ]
+            print(f"  LLM scope filter: {len(relevant)} in-scope pages ({before - len(relevant)} skipped by content)")
 
         all_findings: List[Dict[str, Any]] = []
         for i, page in enumerate(relevant):
