@@ -363,6 +363,7 @@ class LLMDetector(BaseDetector):
             ],
             temperature=0.0,
             max_tokens=2000,
+            timeout=60,
         )
         raw = response.choices[0].message.content.strip()
         if raw.startswith("```"):
