@@ -236,9 +236,19 @@ class Pipeline:
         print(f"Total pages collected: {len(self.pages)}")
         return self.pages
 
+    def _available_detectors(self) -> List[str]:
+        """Infer which detectors to run from the scenario config."""
+        available = []
+        detection = self.config.detection
+        if detection.get("regex_rules"):
+            available.append("regex")
+        if detection.get("llm"):
+            available.append("llm")
+        return available or ["regex"]
+
     def detect(self, *, detectors: List[str] | None = None, emit_all: bool = False) -> List[Dict[str, Any]]:
         """Run detector stage."""
-        detectors = detectors or ["regex"]
+        detectors = detectors or self._available_detectors()
         self.findings = []
         for det_name in detectors:
             print(f"Running detector: {det_name}")
