@@ -22,7 +22,7 @@ from capacitor.utils.release_notes import build_snapshot, fetch_page, extract_se
 
 def _get_github_token() -> str:
     """Get GitHub token from env or fall back to ``gh auth token``."""
-    token = os.getenv("GITHUB_TOKEN", "")
+    token = os.getenv("GITHUB_MODELS_TOKEN", "") or os.getenv("GITHUB_TOKEN", "")
     if token:
         return token
     try:
