@@ -453,9 +453,9 @@ export function activate(context: vscode.ExtensionContext): void {
       statusBarItem.tooltip = "Freshness check in progress — click to cancel";
       statusBarItem.backgroundColor = new vscode.ThemeColor("statusBarItem.warningBackground");
 
-      const cwd = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? process.cwd();
       const scenarioName = path.basename(path.dirname(scenarioPath));
-      const outputDir = path.join(cwd, "output", scenarioName);
+      const scenarioParent = path.dirname(path.dirname(scenarioPath));
+      const outputDir = path.join(scenarioParent, "output", scenarioName);
       const runner = createRunner();
       const result = await runner.runCheck(scenarioPath, outputDir, { timeoutMs: getTimeoutMs() });
 
@@ -502,9 +502,9 @@ export function activate(context: vscode.ExtensionContext): void {
       statusBarItem.tooltip = "Local scan in progress — this may take a while";
       statusBarItem.backgroundColor = new vscode.ThemeColor("statusBarItem.warningBackground");
 
-      const cwd = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? process.cwd();
       const scenarioName = path.basename(path.dirname(scenarioPath));
-      const outputDir = path.join(cwd, "output", scenarioName);
+      const scenarioParent = path.dirname(path.dirname(scenarioPath));
+      const outputDir = path.join(scenarioParent, "output", scenarioName);
       const runner = createRunner();
       const result = await runner.runDeepScan(scenarioPath, outputDir, localPath, { timeoutMs: getTimeoutMs() });
 

@@ -230,39 +230,62 @@ export class ResultsProvider implements vscode.TreeDataProvider<ResultItem> {
     return this.activeScenario;
   }
 
-  /** Return all scenario names that have results in the output directory. */
+  /** Return all scenario names that have results in output directories. */
   getAvailableScenarios(): string[] {
-    const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-    if (!workspaceRoot) { return []; }
-    const outputDir = path.join(workspaceRoot, "output");
-    if (!fs.existsSync(outputDir)) { return []; }
+    const outputDirs = this.getOutputDirs();
     const scenarios: string[] = [];
-    try {
-      for (const entry of fs.readdirSync(outputDir, { withFileTypes: true })) {
-        if (entry.isDirectory()) {
-          const jsonPath = path.join(outputDir, entry.name, "classifications.json");
-          if (fs.existsSync(jsonPath)) {
-            scenarios.push(entry.name);
-          }
-          const localJsonPath = path.join(outputDir, entry.name, "classifications-local.json");
-          if (fs.existsSync(localJsonPath)) {
-            scenarios.push(entry.name + " (Local)");
+    for (const outputDir of outputDirs) {
+      if (!fs.existsSync(outputDir)) { continue; }
+      try {
+        for (const entry of fs.readdirSync(outputDir, { withFileTypes: true })) {
+          if (entry.isDirectory()) {
+            const jsonPath = path.join(outputDir, entry.name, "classifications.json");
+            if (fs.existsSync(jsonPath) && !scenarios.includes(entry.name)) {
+              scenarios.push(entry.name);
+            }
+            const localJsonPath = path.join(outputDir, entry.name, "classifications-local.json");
+            const localLabel = entry.name + " (Local)";
+            if (fs.existsSync(localJsonPath) && !scenarios.includes(localLabel)) {
+              scenarios.push(localLabel);
+            }
           }
         }
-      }
-    } catch { /* ignore */ }
+      } catch { /* ignore */ }
+    }
     return scenarios;
+  }
+
+  /** Collect all output directories: workspace + scenarioPaths siblings. */
+  private getOutputDirs(): string[] {
+    const dirs: string[] = [];
+    const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+    if (workspaceRoot) {
+      dirs.push(path.join(workspaceRoot, "output"));
+    }
+    const scenarioPaths = vscode.workspace
+      .getConfiguration("docs-capacitor")
+      .get<string[]>("scenarioPaths", []);
+    for (const sp of scenarioPaths) {
+      const resolved = path.isAbsolute(sp) ? sp : (workspaceRoot ? path.join(workspaceRoot, sp) : sp);
+      const outputSibling = path.join(resolved, "..", "output");
+      // scenarioPaths may point to the parent of scenarios, so also check <sp>/output
+      dirs.push(path.resolve(outputSibling));
+      dirs.push(path.join(resolved, "output"));
+    }
+    return [...new Set(dirs)];
   }
 
   /** Get the path to the active report CSV file, if it exists. */
   getActiveReportPath(): string | undefined {
-    const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-    if (!workspaceRoot || !this.activeScenario) { return undefined; }
+    if (!this.activeScenario) { return undefined; }
     const isLocal = this.activeScenario.endsWith(" (Local)");
     const dirName = isLocal ? this.activeScenario.replace(" (Local)", "") : this.activeScenario;
     const suffix = isLocal ? "-local" : "";
-    const csvPath = path.join(workspaceRoot, "output", dirName, `report${suffix}.csv`);
-    return fs.existsSync(csvPath) ? csvPath : undefined;
+    for (const outputDir of this.getOutputDirs()) {
+      const csvPath = path.join(outputDir, dirName, `report${suffix}.csv`);
+      if (fs.existsSync(csvPath)) { return csvPath; }
+    }
+    return undefined;
   }
 
   /** Set a classification filter (undefined = show all). */
@@ -548,41 +571,38 @@ export class ResultsProvider implements vscode.TreeDataProvider<ResultItem> {
   private loadResults(): void {
     this.triageState = loadTriageState(this.activeScenario);
 
-    const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-    if (!workspaceRoot) {
-      this.results = [];
-      return;
-    }
-
-    const outputDir = path.join(workspaceRoot, "output");
+    const outputDirs = this.getOutputDirs();
 
     // If a specific scenario is selected, load its results directly
     if (this.activeScenario) {
       const isLocal = this.activeScenario.endsWith(" (Local)");
       const dirName = isLocal ? this.activeScenario.replace(" (Local)", "") : this.activeScenario;
       const suffix = isLocal ? "-local" : "";
-      const scenarioJson = path.join(outputDir, dirName, `classifications${suffix}.json`);
-      if (fs.existsSync(scenarioJson)) {
-        if (this.loadFromJson(scenarioJson)) { return; }
-      }
-      const scenarioCsv = path.join(outputDir, dirName, `report${suffix}.csv`);
-      if (fs.existsSync(scenarioCsv)) {
-        if (this.loadFromCsv(scenarioCsv)) { return; }
+      for (const outputDir of outputDirs) {
+        const scenarioJson = path.join(outputDir, dirName, `classifications${suffix}.json`);
+        if (fs.existsSync(scenarioJson)) {
+          if (this.loadFromJson(scenarioJson)) { return; }
+        }
+        const scenarioCsv = path.join(outputDir, dirName, `report${suffix}.csv`);
+        if (fs.existsSync(scenarioCsv)) {
+          if (this.loadFromCsv(scenarioCsv)) { return; }
+        }
       }
     }
 
-    // No active scenario — find the most recent results across all scenario subdirs
+    // No active scenario — find the most recent results across all output dirs
     const jsonCandidates: string[] = [];
-    // Legacy: top-level output/classifications.json
-    jsonCandidates.push(path.join(outputDir, "classifications.json"));
-    if (fs.existsSync(outputDir)) {
-      try {
-        for (const entry of fs.readdirSync(outputDir, { withFileTypes: true })) {
-          if (entry.isDirectory()) {
-            jsonCandidates.push(path.join(outputDir, entry.name, "classifications.json"));
+    for (const outputDir of outputDirs) {
+      jsonCandidates.push(path.join(outputDir, "classifications.json"));
+      if (fs.existsSync(outputDir)) {
+        try {
+          for (const entry of fs.readdirSync(outputDir, { withFileTypes: true })) {
+            if (entry.isDirectory()) {
+              jsonCandidates.push(path.join(outputDir, entry.name, "classifications.json"));
+            }
           }
-        }
-      } catch { /* ignore */ }
+        } catch { /* ignore */ }
+      }
     }
 
     // Use the most recently modified classifications.json
@@ -599,18 +619,11 @@ export class ResultsProvider implements vscode.TreeDataProvider<ResultItem> {
     }
 
     if (jsonPath) {
-      // Infer the active scenario from the path
       const parent = path.basename(path.dirname(jsonPath));
       if (parent !== "output") {
         this.activeScenario = parent;
       }
       if (this.loadFromJson(jsonPath)) { return; }
-    }
-
-    // Fallback: legacy report.csv
-    const csvPath = path.join(outputDir, "report.csv");
-    if (fs.existsSync(csvPath)) {
-      if (this.loadFromCsv(csvPath)) { return; }
     }
 
     this.results = [];
