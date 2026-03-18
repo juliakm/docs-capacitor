@@ -318,21 +318,30 @@ def classify_page(
                 suggested_fix = None
                 confidence = confidence_cfg.get("up_to_date", "medium")
             elif not topic_rules:
-                # No topic rules configured — classify based on regex signal alone
-                rule_names = ", ".join(regex_rule_ids) if regex_rule_ids else "detection rules"
-                if regex_signal == "P0":
-                    classification = "NEEDS_CLARIFICATION"
-                    reason = f"Regex rule {rule_names} flagged this page. Review the matched content for potential issues."
-                    suggested_fix = "Check the regex-matched content and update if outdated."
-                    confidence = confidence_cfg.get("needs_clarification", "medium")
+                # No topic rules configured — classify based on regex/LLM signals
+                llm_findings = _extract_llm_findings(group)
+                has_evidence = regex_signal not in ("none", "EXCLUDED") or llm_findings
+                if not has_evidence:
+                    classification = "UP_TO_DATE"
+                    reason = "No stale signals found by regex or LLM analysis."
+                    evidence = []
+                    suggested_fix = None
+                    confidence = confidence_cfg.get("up_to_date", "medium")
                 else:
-                    classification = "NEEDS_CLARIFICATION"
-                    reason = f"Page is in scope and matched by {rule_names}. Manual review recommended."
-                    suggested_fix = "Review the page content for accuracy."
-                    confidence = confidence_cfg.get("needs_clarification", "low")
-                evidence = [e for e in [
-                    extract_evidence(lowered_text, product_hit) if product_hit and product_hit is not True else None,
-                ] if e]
+                    rule_names = ", ".join(regex_rule_ids) if regex_rule_ids else "detection rules"
+                    if regex_signal == "P0":
+                        classification = "NEEDS_CLARIFICATION"
+                        reason = f"Regex rule {rule_names} flagged this page. Review the matched content for potential issues."
+                        suggested_fix = "Check the regex-matched content and update if outdated."
+                        confidence = confidence_cfg.get("needs_clarification", "medium")
+                    else:
+                        classification = "NEEDS_CLARIFICATION"
+                        reason = f"Page is in scope and matched by {rule_names}. Manual review recommended."
+                        suggested_fix = "Review the page content for accuracy."
+                        confidence = confidence_cfg.get("needs_clarification", "low")
+                    evidence = [e for e in [
+                        extract_evidence(lowered_text, product_hit) if product_hit and product_hit is not True else None,
+                    ] if e]
             else:
                 llm_findings = _extract_llm_findings(group)
                 has_evidence = regex_signal not in ("none", "EXCLUDED") or llm_findings
