@@ -168,6 +168,19 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand("docs-capacitor.scenario.runCheck", (item: ScenarioItem) => {
       scenarioProvider.runCheck(item);
     }),
+    vscode.commands.registerCommand("docs-capacitor.scenario.deepScan", async (item: ScenarioItem) => {
+      const scenarioPath = item.scenarioPath;
+      const folderUri = await vscode.window.showOpenDialog({
+        canSelectFolders: true,
+        canSelectFiles: false,
+        canSelectMany: false,
+        openLabel: "Select repo folder to scan",
+      });
+      if (!folderUri || folderUri.length === 0) {
+        return;
+      }
+      vscode.commands.executeCommand("docs-capacitor.deepScan", scenarioPath, folderUri[0].fsPath);
+    }),
     vscode.commands.registerCommand("docs-capacitor.scenario.validate", (item: ScenarioItem) => {
       scenarioProvider.validate(item);
     }),
@@ -451,23 +464,26 @@ export function activate(context: vscode.ExtensionContext): void {
 
   // --- Deep Scan Local Repo ---
   context.subscriptions.push(
-    vscode.commands.registerCommand("docs-capacitor.deepScan", async (scenarioPathArg?: string | unknown) => {
+    vscode.commands.registerCommand("docs-capacitor.deepScan", async (scenarioPathArg?: string | unknown, localPathArg?: string) => {
       const rawArg = typeof scenarioPathArg === "string" ? scenarioPathArg : undefined;
       const scenarioPath = rawArg ?? await pickScenario("Select a scenario for deep scan");
       if (!scenarioPath) {
         return;
       }
 
-      const folderUri = await vscode.window.showOpenDialog({
-        canSelectFolders: true,
-        canSelectFiles: false,
-        canSelectMany: false,
-        openLabel: "Select repo folder to scan",
-      });
-      if (!folderUri || folderUri.length === 0) {
-        return;
+      let localPath = typeof localPathArg === "string" ? localPathArg : undefined;
+      if (!localPath) {
+        const folderUri = await vscode.window.showOpenDialog({
+          canSelectFolders: true,
+          canSelectFiles: false,
+          canSelectMany: false,
+          openLabel: "Select repo folder to scan",
+        });
+        if (!folderUri || folderUri.length === 0) {
+          return;
+        }
+        localPath = folderUri[0].fsPath;
       }
-      const localPath = folderUri[0].fsPath;
 
       statusBarItem.text = "$(sync~spin) Capacitor: Deep Scan…";
       statusBarItem.tooltip = "Deep scan in progress — this may take a while";

@@ -66,6 +66,12 @@
         "icon": "$(play)"
       },
       {
+        "command": "docs-capacitor.scenario.deepScan",
+        "title": "Deep Scan Local Repo",
+        "category": "Docs Capacitor",
+        "icon": "$(search)"
+      },
+      {
         "command": "docs-capacitor.scenario.validate",
         "title": "Validate",
         "category": "Docs Capacitor",
@@ -190,6 +196,11 @@
           "command": "docs-capacitor.scenario.runCheck",
           "when": "view == docsCapacitorScenarios && viewItem == scenario",
           "group": "1_run@1"
+        },
+        {
+          "command": "docs-capacitor.scenario.deepScan",
+          "when": "view == docsCapacitorScenarios && viewItem == scenario",
+          "group": "1_run@2"
         },
         {
           "command": "docs-capacitor.scenario.validate",
