@@ -339,6 +339,7 @@ def classify_page(
                 if not has_evidence:
                     classification = "UP_TO_DATE"
                     reason = "No stale signals found by regex or LLM analysis."
+                    evidence = []
                     suggested_fix = None
                     confidence = confidence_cfg.get("up_to_date", "medium")
                 else:
