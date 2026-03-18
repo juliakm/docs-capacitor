@@ -75,12 +75,11 @@ def _matches_scope(
     tool_patterns: List[str],
 ) -> bool:
     """Return True if page text mentions both the target product and tool."""
-    lowered = text.lower()
     product_hit = not product_patterns or any(
-        re.search(p, lowered) for p in product_patterns
+        re.search(p, text, re.IGNORECASE) for p in product_patterns
     )
     tool_hit = not tool_patterns or any(
-        re.search(p, lowered) for p in tool_patterns
+        re.search(p, text, re.IGNORECASE) for p in tool_patterns
     )
     return product_hit and tool_hit
 
