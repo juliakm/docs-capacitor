@@ -27,7 +27,7 @@
       },
       {
         "command": "docs-capacitor.deepScan",
-        "title": "Deep Scan Local Repo",
+        "title": "Scan Local Repo",
         "category": "Docs Capacitor",
         "icon": "$(search)"
       },
@@ -67,7 +67,7 @@
       },
       {
         "command": "docs-capacitor.scenario.deepScan",
-        "title": "Deep Scan Local Repo",
+        "title": "Scan Local Repo",
         "category": "Docs Capacitor",
         "icon": "$(search)"
       },

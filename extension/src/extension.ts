@@ -462,7 +462,7 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
   );
 
-  // --- Deep Scan Local Repo ---
+  // --- Scan Local Repo ---
   context.subscriptions.push(
     vscode.commands.registerCommand("docs-capacitor.deepScan", async (scenarioPathArg?: string | unknown, localPathArg?: string) => {
       const rawArg = typeof scenarioPathArg === "string" ? scenarioPathArg : undefined;
@@ -485,13 +485,13 @@ export function activate(context: vscode.ExtensionContext): void {
         localPath = folderUri[0].fsPath;
       }
 
-      statusBarItem.text = "$(sync~spin) Capacitor: Deep Scan…";
-      statusBarItem.tooltip = "Deep scan in progress — this may take a while";
+      statusBarItem.text = "$(sync~spin) Capacitor: Local Scan…";
+      statusBarItem.tooltip = "Local scan in progress — this may take a while";
       statusBarItem.backgroundColor = new vscode.ThemeColor("statusBarItem.warningBackground");
 
       const cwd = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? process.cwd();
       const scenarioName = path.basename(path.dirname(scenarioPath));
-      const outputDir = path.join(cwd, "output", scenarioName);
+      const outputDir = path.join(cwd, "output", scenarioName + "-local");
       const runner = createRunner();
       const result = await runner.runDeepScan(scenarioPath, outputDir, localPath, { timeoutMs: getTimeoutMs() });
 
@@ -499,9 +499,9 @@ export function activate(context: vscode.ExtensionContext): void {
       if (result.success) {
         const now = new Date().toLocaleTimeString();
         statusBarItem.text = `$(beaker) Capacitor ✓ ${now}`;
-        statusBarItem.tooltip = `Deep scan: ${scenarioName} at ${now}`;
-        vscode.window.showInformationMessage(`✅ Deep scan complete for ${scenarioName} — see Results panel.`);
-        resultsProvider.loadScenario(scenarioName);
+        statusBarItem.tooltip = `Local scan: ${scenarioName} at ${now}`;
+        vscode.window.showInformationMessage(`✅ Local scan complete for ${scenarioName} — see Results panel.`);
+        resultsProvider.loadScenario(scenarioName + "-local");
       } else {
         statusBarItem.text = "$(beaker) Capacitor ✗ Failed";
         statusBarItem.tooltip = "Deep scan failed — click to retry";
