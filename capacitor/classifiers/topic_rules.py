@@ -334,17 +334,25 @@ def classify_page(
                     extract_evidence(lowered_text, product_hit) if product_hit and product_hit is not True else None,
                 ] if e]
             else:
-                classification = "NEEDS_CLARIFICATION"
-                if topic_seen_in_notes:
-                    reason = "No explicit stale or current signal was detected for matching release-note topics."
+                llm_findings = _extract_llm_findings(group)
+                has_evidence = regex_signal not in ("none", "EXCLUDED") or llm_findings
+                if not has_evidence:
+                    classification = "UP_TO_DATE"
+                    reason = "No stale signals found by regex or LLM analysis."
+                    suggested_fix = None
+                    confidence = confidence_cfg.get("up_to_date", "medium")
                 else:
-                    reason = "No matching release-note topic was detected for this page's guidance."
-                evidence = [e for e in [
-                    extract_evidence(lowered_text, product_hit) if product_hit and product_hit is not True else None,
-                    extract_evidence(lowered_text, tool_hit) if tool_hit and tool_hit is not True else None,
-                ] if e]
-                suggested_fix = "Clarify the guidance with version/topic-specific statements that can be validated."
-                confidence = confidence_cfg.get("needs_clarification", "medium")
+                    classification = "NEEDS_CLARIFICATION"
+                    if topic_seen_in_notes:
+                        reason = "No explicit stale or current signal was detected for matching release-note topics."
+                    else:
+                        reason = "No matching release-note topic was detected for this page's guidance."
+                    evidence = [e for e in [
+                        extract_evidence(lowered_text, product_hit) if product_hit and product_hit is not True else None,
+                        extract_evidence(lowered_text, tool_hit) if tool_hit and tool_hit is not True else None,
+                    ] if e]
+                    suggested_fix = "Clarify the guidance with version/topic-specific statements that can be validated."
+                    confidence = confidence_cfg.get("needs_clarification", "medium")
 
     return {
         "page_url": url,
