@@ -27,7 +27,7 @@ class JSONReporter(BaseReporter):
         strategy: Dict[str, Any] | None = None,
         **kwargs: Any,
     ) -> Path:
-        json_path = out_dir / "classifications.json"
+        json_path = out_dir / f"classifications{kwargs.get('file_suffix', '')}.json"
         out_dir.mkdir(parents=True, exist_ok=True)
 
         # Only include actionable results — UP_TO_DATE and EXCLUDED are noise

@@ -70,6 +70,7 @@ def check(
         areas=list(area) or None,
         formats=list(formats) or None,
         pages_jsonl=pages_jsonl,
+        file_suffix="-local" if local_path else "",
     )
     for r in reports:
         click.echo(f"Report: {r}")

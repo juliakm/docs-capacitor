@@ -122,7 +122,7 @@ class MarkdownReporter(BaseReporter):
                     f"(regex_rules={regex_rules}; release_note_ref={release_ref}; {row.get('reason')})"
                 )
 
-        report_path = out_dir / "report.md"
+        report_path = out_dir / f"report{kwargs.get('file_suffix', '')}.md"
         out_dir.mkdir(parents=True, exist_ok=True)
         report_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
         return report_path

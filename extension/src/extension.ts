@@ -491,7 +491,7 @@ export function activate(context: vscode.ExtensionContext): void {
 
       const cwd = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? process.cwd();
       const scenarioName = path.basename(path.dirname(scenarioPath));
-      const outputDir = path.join(cwd, "output", scenarioName + "-local");
+      const outputDir = path.join(cwd, "output", scenarioName);
       const runner = createRunner();
       const result = await runner.runDeepScan(scenarioPath, outputDir, localPath, { timeoutMs: getTimeoutMs() });
 
@@ -501,7 +501,7 @@ export function activate(context: vscode.ExtensionContext): void {
         statusBarItem.text = `$(beaker) Capacitor ✓ ${now}`;
         statusBarItem.tooltip = `Local scan: ${scenarioName} at ${now}`;
         vscode.window.showInformationMessage(`✅ Local scan complete for ${scenarioName} — see Results panel.`);
-        resultsProvider.loadScenario(scenarioName + "-local");
+        resultsProvider.loadScenario(scenarioName);
       } else {
         statusBarItem.text = "$(beaker) Capacitor ✗ Failed";
         statusBarItem.tooltip = "Deep scan failed — click to retry";

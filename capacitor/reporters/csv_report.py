@@ -47,7 +47,8 @@ class CSVReporter(BaseReporter):
         strategy: Dict[str, Any] | None = None,
         **kwargs: Any,
     ) -> Path:
-        csv_path = out_dir / "report.csv"
+        suffix = kwargs.get("file_suffix", "")
+        csv_path = out_dir / f"report{suffix}.csv"
         out_dir.mkdir(parents=True, exist_ok=True)
 
         with csv_path.open("w", newline="", encoding="utf-8") as f:

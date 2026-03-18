@@ -320,7 +320,7 @@ class Pipeline:
             print(f"  {cls_name}: {count}")
         return self.classifications
 
-    def report(self, *, formats: List[str] | None = None) -> List[Path]:
+    def report(self, *, formats: List[str] | None = None, file_suffix: str = "") -> List[Path]:
         """Run reporter stage."""
         formats = formats or self.config.reporting.get("formats", ["markdown"])
         report_title = self.config.reporting.get("title", "Documentation Freshness Report")
@@ -341,6 +341,7 @@ class Pipeline:
                 report_title=report_title,
                 section_key=section_key,
                 date_skipped=getattr(self, "_date_skipped", 0),
+                file_suffix=file_suffix,
             )
             print(f"Report written: {path}")
             paths.append(path)
@@ -355,6 +356,7 @@ class Pipeline:
         formats: List[str] | None = None,
         skip_collect: bool = False,
         pages_jsonl: str | None = None,
+        file_suffix: str = "",
     ) -> List[Path]:
         """Run the full pipeline end-to-end."""
         self.refresh_release_notes()
@@ -362,4 +364,4 @@ class Pipeline:
             self.collect(sources=sources, pages_jsonl=pages_jsonl)
         self.detect(detectors=detectors, emit_all=True)
         self.classify(areas=areas)
-        return self.report(formats=formats)
+        return self.report(formats=formats, file_suffix=file_suffix)
