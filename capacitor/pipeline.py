@@ -101,9 +101,16 @@ class Pipeline:
             relevance_terms=[product.get("name", ""), product.get("tool", "")],
         )
 
-    def _build_local_collector(self, root: str | Path = ".", glob_pattern: str = "**/*.md") -> Any:
+    def _build_local_collector(self) -> Any:
         cls = COLLECTOR_REGISTRY.get("local")
-        return cls(root=root, glob_pattern=glob_pattern) if cls else None
+        if not cls:
+            return None
+        local_cfg = self.config.search.get("local", {})
+        root = local_cfg.get("root", ".")
+        if not Path(root).is_absolute():
+            root = str(self.config.scenario_dir / root)
+        glob_pattern = local_cfg.get("glob_pattern", "**/*.md")
+        return cls(root=root, glob_pattern=glob_pattern)
 
     def _build_regex_detector(self) -> Any:
         cls = DETECTOR_REGISTRY.get("regex")
@@ -207,9 +214,21 @@ class Pipeline:
         defragged, _ = urldefrag(url)
         return defragged.rstrip("/")
 
+    def _available_sources(self) -> List[str]:
+        """Infer which collection sources to use from the scenario config."""
+        search = self.config.search
+        available = []
+        if search.get("github"):
+            available.append("github")
+        if search.get("learn"):
+            available.append("learn")
+        if search.get("local"):
+            available.append("local")
+        return available or ["github", "learn"]
+
     def collect(self, *, sources: List[str] | None = None, pages_jsonl: str | None = None) -> List[Dict[str, Any]]:
         """Run collector stage with cross-source deduplication."""
-        sources = sources or ["github", "learn"]
+        sources = sources or self._available_sources()
         self.pages = []
         self._seen_urls = set()
         self._date_skipped = 0
