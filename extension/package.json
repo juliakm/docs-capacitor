@@ -162,6 +162,12 @@
         "icon": "$(refresh)"
       },
       {
+        "command": "docs-capacitor.openReport",
+        "title": "Open Report",
+        "category": "Docs Capacitor",
+        "icon": "$(go-to-file)"
+      },
+      {
         "command": "docs-capacitor.switchResults",
         "title": "Switch Results Scenario",
         "category": "Docs Capacitor",
@@ -320,9 +326,14 @@
           "group": "navigation@5"
         },
         {
-          "command": "docs-capacitor.switchResults",
+          "command": "docs-capacitor.openReport",
           "when": "view == docsCapacitorResults",
           "group": "navigation@6"
+        },
+        {
+          "command": "docs-capacitor.switchResults",
+          "when": "view == docsCapacitorResults",
+          "group": "navigation@7"
         }
       ]
     },

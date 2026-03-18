@@ -244,10 +244,25 @@ export class ResultsProvider implements vscode.TreeDataProvider<ResultItem> {
           if (fs.existsSync(jsonPath)) {
             scenarios.push(entry.name);
           }
+          const localJsonPath = path.join(outputDir, entry.name, "classifications-local.json");
+          if (fs.existsSync(localJsonPath)) {
+            scenarios.push(entry.name + " (Local)");
+          }
         }
       }
     } catch { /* ignore */ }
     return scenarios;
+  }
+
+  /** Get the path to the active report CSV file, if it exists. */
+  getActiveReportPath(): string | undefined {
+    const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+    if (!workspaceRoot || !this.activeScenario) { return undefined; }
+    const isLocal = this.activeScenario.endsWith(" (Local)");
+    const dirName = isLocal ? this.activeScenario.replace(" (Local)", "") : this.activeScenario;
+    const suffix = isLocal ? "-local" : "";
+    const csvPath = path.join(workspaceRoot, "output", dirName, `report${suffix}.csv`);
+    return fs.existsSync(csvPath) ? csvPath : undefined;
   }
 
   /** Set a classification filter (undefined = show all). */
@@ -543,12 +558,14 @@ export class ResultsProvider implements vscode.TreeDataProvider<ResultItem> {
 
     // If a specific scenario is selected, load its results directly
     if (this.activeScenario) {
-      const scenarioJson = path.join(outputDir, this.activeScenario, "classifications.json");
+      const isLocal = this.activeScenario.endsWith(" (Local)");
+      const dirName = isLocal ? this.activeScenario.replace(" (Local)", "") : this.activeScenario;
+      const suffix = isLocal ? "-local" : "";
+      const scenarioJson = path.join(outputDir, dirName, `classifications${suffix}.json`);
       if (fs.existsSync(scenarioJson)) {
         if (this.loadFromJson(scenarioJson)) { return; }
       }
-      // Fallback to CSV in scenario dir
-      const scenarioCsv = path.join(outputDir, this.activeScenario, "report.csv");
+      const scenarioCsv = path.join(outputDir, dirName, `report${suffix}.csv`);
       if (fs.existsSync(scenarioCsv)) {
         if (this.loadFromCsv(scenarioCsv)) { return; }
       }

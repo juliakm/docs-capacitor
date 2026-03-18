@@ -387,6 +387,19 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
   );
 
+  // --- Open Report File ---
+  context.subscriptions.push(
+    vscode.commands.registerCommand("docs-capacitor.openReport", async () => {
+      const reportPath = resultsProvider.getActiveReportPath();
+      if (reportPath) {
+        const doc = await vscode.workspace.openTextDocument(reportPath);
+        await vscode.window.showTextDocument(doc);
+      } else {
+        vscode.window.showInformationMessage("No report file found for the active scenario.");
+      }
+    }),
+  );
+
   // --- Switch Results Scenario ---
   context.subscriptions.push(
     vscode.commands.registerCommand("docs-capacitor.switchResults", async () => {
