@@ -479,7 +479,7 @@ export class SettingsPanel {
 
   // ── set initial values from embedded data ───────────────
   (function initFromEmbedded() {
-    var d = JSON.parse('${initData.replace(/'/g, "\\'")}');
+    var d = JSON.parse(decodeURIComponent("${encodeURIComponent(initData)}"));
     modelsUserInput.value = d.modelsUser || "";
     pythonPathInput.value = d.pythonPath || "python3";
     timeoutInput.value = String(d.timeoutMs || 1800000);
