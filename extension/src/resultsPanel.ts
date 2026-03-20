@@ -54,6 +54,16 @@ export class ResultsPanel {
     );
 
     ResultsPanel.instance = new ResultsPanel(panel, extensionUri, results, scenarioName, triageState);
+
+    // Also send data after a short delay as a fallback for timing issues
+    setTimeout(() => {
+      ResultsPanel.instance?.panel.webview.postMessage({
+        command: "setResults",
+        results,
+        scenarioName,
+        triageState,
+      });
+    }, 500);
   }
 
   private constructor(
