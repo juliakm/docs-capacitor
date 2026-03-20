@@ -49,9 +49,9 @@
       },
       {
         "command": "docs-capacitor.setupEnvironment",
-        "title": "Setup Environment",
+        "title": "Settings & Authentication",
         "category": "Docs Capacitor",
-        "icon": "$(tools)"
+        "icon": "$(gear)"
       },
       {
         "command": "docs-capacitor.scenario.refresh",

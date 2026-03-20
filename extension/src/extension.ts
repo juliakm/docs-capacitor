@@ -4,8 +4,9 @@ import { ResultsProvider, PageResult, LlmFinding } from "./resultsProvider";
 import { PipelineRunner } from "./runner";
 import { ScenarioWizardPanel } from "./wizardPanel";
 import { ResultsPanel } from "./resultsPanel";
+import { SettingsPanel } from "./settingsPanel";
 import { ScenarioProvider, ScenarioItem } from "./scenarioProvider";
-import { showSetupReport, activationCheck } from "./setupChecker";
+import { showSetupReport, activationCheck, runAllChecks } from "./setupChecker";
 import { analyzeTriage, TriageAnalysis, TriageSuggestion, ScenarioConfig } from "./triageAnalyzer";
 
 const OUTPUT_CHANNEL_NAME = "Docs Capacitor";
@@ -584,12 +585,104 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
   );
 
-  // --- Setup Environment ---
+  // --- Setup Environment / Settings ---
   context.subscriptions.push(
-    vscode.commands.registerCommand("docs-capacitor.setupEnvironment", () => {
-      showSetupReport(outputChannel);
+    vscode.commands.registerCommand("docs-capacitor.setupEnvironment", async () => {
+      SettingsPanel.createOrShow(context.extensionUri);
+
+      // Run checks and send state to the panel
+      const checks = await runAllChecks();
+
+      // Read current settings
+      const config = vscode.workspace.getConfiguration("docs-capacitor");
+      const pythonPath = config.get<string>("pythonPath", "python3");
+      const timeoutMs = config.get<number>("timeoutMs", 1800000);
+      const scenarioPaths = config.get<string[]>("scenarioPaths", []);
+
+      // Read GITHUB_MODELS_USER from .env
+      let modelsUser = process.env.GITHUB_MODELS_USER ?? "";
+      const cwd = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+      if (!modelsUser && cwd) {
+        try {
+          const envPath = require("path").join(cwd, ".env");
+          const envContent = require("fs").readFileSync(envPath, "utf-8") as string;
+          const match = envContent.match(/GITHUB_MODELS_USER\s*=\s*(.+)/);
+          if (match) { modelsUser = match[1].trim(); }
+        } catch { /* no .env */ }
+      }
+
+      SettingsPanel.postState(checks, modelsUser, pythonPath, timeoutMs, scenarioPaths);
     }),
   );
+
+  // --- Settings Panel Message Handlers ---
+  SettingsPanel.onMessage = async (msg) => {
+    switch (msg.command) {
+      case "checkStatus": {
+        const checks = await runAllChecks();
+        SettingsPanel.postStatusUpdate(checks);
+        break;
+      }
+      case "switchGitHubAccount":
+      case "addModelsAccount": {
+        const terminal = vscode.window.createTerminal("GitHub Auth");
+        terminal.show();
+        terminal.sendText("gh auth login -h github.com");
+        break;
+      }
+      case "saveModelsUser": {
+        const user = (msg as { user?: string }).user ?? "";
+        const wsRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+        if (wsRoot) {
+          const fs = require("fs") as typeof import("fs");
+          const envPath = require("path").join(wsRoot, ".env");
+          let content = "";
+          try { content = fs.readFileSync(envPath, "utf-8"); } catch { /* new file */ }
+          if (content.match(/GITHUB_MODELS_USER\s*=/)) {
+            content = content.replace(/GITHUB_MODELS_USER\s*=.*/, `GITHUB_MODELS_USER=${user}`);
+          } else {
+            content += `${content && !content.endsWith("\n") ? "\n" : ""}GITHUB_MODELS_USER=${user}\n`;
+          }
+          fs.writeFileSync(envPath, content, "utf-8");
+          vscode.window.showInformationMessage(`Saved GITHUB_MODELS_USER=${user} to .env`);
+        }
+        break;
+      }
+      case "testModelsConnection": {
+        const { spawn } = require("child_process") as typeof import("child_process");
+        const user = (msg as { user?: string }).user ?? "";
+        const args = user ? ["auth", "token", "-u", user] : ["auth", "token"];
+        try {
+          const child = spawn("gh", args, { timeout: 5000 });
+          let stdout = "";
+          child.stdout?.on("data", (d: Buffer) => { stdout += d.toString(); });
+          child.on("close", (code: number | null) => {
+            SettingsPanel.postTestResult(
+              code === 0 && stdout.trim().length > 0,
+              code === 0 ? `Token retrieved for ${user || "active account"}` : "Failed to get token",
+            );
+          });
+          child.on("error", () => {
+            SettingsPanel.postTestResult(false, "gh CLI not found");
+          });
+        } catch {
+          SettingsPanel.postTestResult(false, "Failed to run gh CLI");
+        }
+        break;
+      }
+      case "saveSettings": {
+        const { pythonPath, timeoutMs, scenarioPaths } = msg as {
+          pythonPath?: string; timeoutMs?: number; scenarioPaths?: string[];
+        };
+        const config = vscode.workspace.getConfiguration("docs-capacitor");
+        if (pythonPath !== undefined) { await config.update("pythonPath", pythonPath, true); }
+        if (timeoutMs !== undefined) { await config.update("timeoutMs", timeoutMs, true); }
+        if (scenarioPaths !== undefined) { await config.update("scenarioPaths", scenarioPaths, true); }
+        vscode.window.showInformationMessage("Settings saved.");
+        break;
+      }
+    }
+  };
 
   outputChannel.appendLine("Docs Capacitor extension activated.");
 
