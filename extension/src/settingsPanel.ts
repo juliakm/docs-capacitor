@@ -184,6 +184,13 @@ export class SettingsPanel {
 
   private getHtml(): string {
     const nonce = getNonce();
+    const config = vscode.workspace.getConfiguration("docs-capacitor");
+    const initData = JSON.stringify({
+      modelsUser: process.env["GITHUB_MODELS_USER"] ?? "",
+      pythonPath: config.get<string>("pythonPath", "python3"),
+      timeoutMs: config.get<number>("timeoutMs", 1800000),
+      scenarioPaths: config.get<string[]>("scenarioPaths", []),
+    });
 
     return /* html */ `<!DOCTYPE html>
 <html lang="en">
@@ -470,7 +477,15 @@ export class SettingsPanel {
     });
   });
 
-  // ── request initial state ──────────────────────────────
+  // ── set initial values from embedded data ───────────────
+  (function initFromEmbedded() {
+    var d = JSON.parse('${initData.replace(/'/g, "\\'")}');
+    modelsUserInput.value = d.modelsUser || "";
+    pythonPathInput.value = d.pythonPath || "python3";
+    timeoutInput.value = String(d.timeoutMs || 1800000);
+    scenarioPaths = d.scenarioPaths ? d.scenarioPaths.slice() : [];
+    renderScenarioPaths();
+  })();
   vscode.postMessage({ command: "ready" });
 })();
 </script>

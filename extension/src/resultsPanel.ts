@@ -303,9 +303,9 @@ export class ResultsPanel {
   (function () {
     const vscode = acquireVsCodeApi();
 
-    let allResults = [];
-    let scenarioName = '';
-    let triageState = { decisions: {}, ignored_repos: [] };
+    let allResults = ${JSON.stringify(this.results)};
+    let scenarioName = ${JSON.stringify(this.scenarioName)};
+    let triageState = ${JSON.stringify(this.triageState)};
     let sortCol = 'classification';
     let sortAsc = true;
     let expandedUrl = null;
@@ -601,8 +601,11 @@ export class ResultsPanel {
       }
     });
 
-    // signal readiness
-    vscode.postMessage({ command: 'ready' });
+    // render immediately with embedded data
+    renderSummary();
+    populateRepoFilter();
+    updateSortArrows();
+    renderTable();
   })();
   </script>
 </body>
