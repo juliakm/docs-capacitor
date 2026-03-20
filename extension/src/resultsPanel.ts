@@ -135,13 +135,6 @@ export class ResultsPanel {
 
   private getHtml(): string {
     const nonce = getNonce();
-    // Safely encode data for embedding in a <script> block inside a template literal
-    const safeJson = (obj: unknown): string =>
-      JSON.stringify(obj)
-        .replace(/\\/g, "\\\\")
-        .replace(/`/g, "\\`")
-        .replace(/\$/g, "\\$")
-        .replace(/<\/script/gi, "<\\/script");
 
     return /* html */ `<!DOCTYPE html>
 <html lang="en">
@@ -310,9 +303,9 @@ export class ResultsPanel {
   (function () {
     const vscode = acquireVsCodeApi();
 
-    let allResults = JSON.parse(decodeURIComponent("${encodeURIComponent(JSON.stringify(this.results))}"));
-    let scenarioName = ${JSON.stringify(this.scenarioName).replace(/`/g, "\\`").replace(/\$/g, "\\$")};
-    let triageState = JSON.parse(decodeURIComponent("${encodeURIComponent(JSON.stringify(this.triageState))}"));
+    let allResults = [];
+    let scenarioName = '';
+    let triageState = { decisions: {}, ignored_repos: [] };
     let sortCol = 'classification';
     let sortAsc = true;
     let expandedUrl = null;
@@ -609,11 +602,22 @@ export class ResultsPanel {
     });
 
     // render immediately with embedded data
-    console.log('[DocsCapacitor] allResults count:', allResults.length);
+    console.log('[DocsCapacitor] Panel script loaded, requesting data...');
     renderSummary();
     populateRepoFilter();
     updateSortArrows();
     renderTable();
+
+    // Request data from extension — retry until we get it
+    vscode.postMessage({ command: 'ready' });
+    var retryInterval = setInterval(function() {
+      if (allResults.length > 0) {
+        clearInterval(retryInterval);
+        return;
+      }
+      console.log('[DocsCapacitor] Retrying data request...');
+      vscode.postMessage({ command: 'ready' });
+    }, 1000);
   })();
   </script>
 </body>
