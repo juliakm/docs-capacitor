@@ -3,6 +3,7 @@ import * as path from "path";
 import { ResultsProvider, PageResult, LlmFinding } from "./resultsProvider";
 import { PipelineRunner } from "./runner";
 import { ScenarioWizardPanel } from "./wizardPanel";
+import { ResultsPanel } from "./resultsPanel";
 import { ScenarioProvider, ScenarioItem } from "./scenarioProvider";
 import { showSetupReport, activationCheck } from "./setupChecker";
 import { analyzeTriage, TriageAnalysis, TriageSuggestion, ScenarioConfig } from "./triageAnalyzer";
@@ -397,6 +398,23 @@ export function activate(context: vscode.ExtensionContext): void {
       } else {
         vscode.window.showInformationMessage("No report file found for the active scenario.");
       }
+    }),
+  );
+
+  // --- Open Results in Panel ---
+  ResultsPanel.onTriageCallback = (url, decision) => {
+    resultsProvider.triageUrl(url, decision);
+  };
+  context.subscriptions.push(
+    vscode.commands.registerCommand("docs-capacitor.openResultsPanel", () => {
+      const results = resultsProvider.getResults();
+      const scenario = resultsProvider.getActiveScenario() ?? "Results";
+      const triageState = resultsProvider.getTriageState();
+      if (results.length === 0) {
+        vscode.window.showInformationMessage("No results to display. Run a freshness check first.");
+        return;
+      }
+      ResultsPanel.createOrShow(context.extensionUri, results, scenario, triageState);
     }),
   );
 

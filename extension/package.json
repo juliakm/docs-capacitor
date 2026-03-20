@@ -168,6 +168,12 @@
         "icon": "$(go-to-file)"
       },
       {
+        "command": "docs-capacitor.openResultsPanel",
+        "title": "Open Results Panel",
+        "category": "Docs Capacitor",
+        "icon": "$(table)"
+      },
+      {
         "command": "docs-capacitor.switchResults",
         "title": "Switch Results Scenario",
         "category": "Docs Capacitor",
@@ -331,9 +337,14 @@
           "group": "navigation@6"
         },
         {
-          "command": "docs-capacitor.switchResults",
+          "command": "docs-capacitor.openResultsPanel",
           "when": "view == docsCapacitorResults",
           "group": "navigation@7"
+        },
+        {
+          "command": "docs-capacitor.switchResults",
+          "when": "view == docsCapacitorResults",
+          "group": "navigation@8"
         }
       ]
     },
