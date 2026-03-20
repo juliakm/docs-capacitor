@@ -35,14 +35,9 @@ export class ResultsPanel {
       ResultsPanel.instance.results = results;
       ResultsPanel.instance.scenarioName = scenarioName;
       ResultsPanel.instance.triageState = triageState;
+      // Force fresh HTML to pick up any code changes
+      ResultsPanel.instance.panel.webview.html = ResultsPanel.instance.getHtml();
       ResultsPanel.instance.panel.reveal(column);
-      // Re-send data when revealing with updated results
-      ResultsPanel.instance.panel.webview.postMessage({
-        command: "setResults",
-        results,
-        scenarioName,
-        triageState,
-      });
       return;
     }
 
@@ -50,20 +45,10 @@ export class ResultsPanel {
       ResultsPanel.viewType,
       `Results: ${scenarioName}`,
       column,
-      { enableScripts: true, retainContextWhenHidden: true },
+      { enableScripts: true },
     );
 
     ResultsPanel.instance = new ResultsPanel(panel, extensionUri, results, scenarioName, triageState);
-
-    // Also send data after a short delay as a fallback for timing issues
-    setTimeout(() => {
-      ResultsPanel.instance?.panel.webview.postMessage({
-        command: "setResults",
-        results,
-        scenarioName,
-        triageState,
-      });
-    }, 500);
   }
 
   private constructor(
@@ -86,14 +71,6 @@ export class ResultsPanel {
     this.panel.webview.onDidReceiveMessage(
       (msg: { command: string; url?: string; decision?: TriageDecision }) => {
         switch (msg.command) {
-          case "ready":
-            this.panel.webview.postMessage({
-              command: "setResults",
-              results: this.results,
-              scenarioName: this.scenarioName,
-              triageState: this.triageState,
-            });
-            break;
           case "triage":
             if (msg.url && msg.decision) {
               this.handleTriage(msg.url, msg.decision);
@@ -133,8 +110,13 @@ export class ResultsPanel {
 
   // ── HTML ──────────────────────────────────────────────────────────────
 
-  private getHtml(): string {
+  public getHtml(): string {
     const nonce = getNonce();
+    const b64 = Buffer.from(JSON.stringify({
+      results: this.results,
+      scenarioName: this.scenarioName,
+      triageState: this.triageState,
+    })).toString("base64");
 
     return /* html */ `<!DOCTYPE html>
 <html lang="en">
@@ -284,6 +266,8 @@ export class ResultsPanel {
     <span class="showing-count" id="showingCount"></span>
   </div>
 
+  <script type="application/json" id="initialData">\${b64}</script>
+
   <!-- table -->
   <table>
     <thead>
@@ -301,19 +285,28 @@ export class ResultsPanel {
 
   <script nonce="${nonce}">
   (function () {
-    const vscode = acquireVsCodeApi();
+    var vscode = acquireVsCodeApi();
 
-    let allResults = [];
-    let scenarioName = '';
-    let triageState = { decisions: {}, ignored_repos: [] };
-    let sortCol = 'classification';
-    let sortAsc = true;
-    let expandedUrl = null;
+    // ── load embedded data via base64 ─────────────────────
+    var payload = {};
+    try {
+      var raw = document.getElementById('initialData').textContent || '';
+      payload = JSON.parse(atob(raw));
+    } catch (e) {
+      payload = { results: [], scenarioName: '', triageState: { decisions: {}, ignored_repos: [] } };
+    }
+
+    var allResults = payload.results || [];
+    var scenarioName = payload.scenarioName || '';
+    var triageState = payload.triageState || { decisions: {}, ignored_repos: [] };
+    var sortCol = 'classification';
+    var sortAsc = true;
+    var expandedUrl = null;
 
     // ── helpers ───────────────────────────────────────────
     function getSource(r) {
-      const hasRegex = r.regex_signal && r.regex_signal !== 'none' && r.regex_signal !== 'EXCLUDED';
-      const hasLlm = r.llm_findings && r.llm_findings.length > 0;
+      var hasRegex = r.regex_signal && r.regex_signal !== 'none' && r.regex_signal !== 'EXCLUDED';
+      var hasLlm = r.llm_findings && r.llm_findings.length > 0;
       if (hasRegex && hasLlm) return 'Both';
       if (hasRegex) return 'Regex';
       if (hasLlm) return 'LLM';
@@ -321,7 +314,7 @@ export class ResultsPanel {
     }
 
     function repoFromUrl(url) {
-      const m = url.match(/github\\.com\\/([^/]+\\/[^/]+)/);
+      var m = url.match(/github\\.com\\/([^/]+\\/[^/]+)/);
       if (m) return m[1];
       if (/learn\\.microsoft\\.com/.test(url)) return 'Microsoft Learn';
       return '';
@@ -329,24 +322,26 @@ export class ResultsPanel {
 
     function titleFromUrl(url) {
       try {
-        const p = new URL(url).pathname;
-        const seg = p.split('/').filter(Boolean).pop() || '';
-        return seg.replace(/-/g, ' ').replace(/\\b\\w/g, c => c.toUpperCase());
-      } catch { return url; }
+        var p = new URL(url).pathname;
+        var seg = p.split('/').filter(Boolean).pop() || '';
+        return seg.replace(/-/g, ' ').replace(/\\b\\w/g, function(c) { return c.toUpperCase(); });
+      } catch (e) { return url; }
     }
 
     function shortenUrl(url) {
       try {
-        const u = new URL(url);
-        const p = u.pathname.length > 60 ? '…' + u.pathname.slice(-55) : u.pathname;
+        var u = new URL(url);
+        var p = u.pathname.length > 60 ? '\\u2026' + u.pathname.slice(-55) : u.pathname;
         return u.host + p;
-      } catch { return url; }
+      } catch (e) { return url; }
     }
 
     function severity(r) {
       if (r.regex_signal && r.regex_signal !== 'none' && r.regex_signal !== 'EXCLUDED') return r.regex_signal;
       if (r.llm_findings) {
-        for (const f of r.llm_findings) { if (f.severity) return f.severity; }
+        for (var i = 0; i < r.llm_findings.length; i++) {
+          if (r.llm_findings[i].severity) return r.llm_findings[i].severity;
+        }
       }
       return '';
     }
@@ -360,13 +355,15 @@ export class ResultsPanel {
       return triageState.decisions[url] || 'untriaged';
     }
 
-    const classOrder = { 'P0_OUTDATED': 0, 'NEEDS_CLARIFICATION': 1, 'UP_TO_DATE': 2, 'EXCLUDED': 3 };
+    var classOrder = { 'P0_OUTDATED': 0, 'NEEDS_CLARIFICATION': 1, 'UP_TO_DATE': 2, 'EXCLUDED': 3 };
 
     // ── render ────────────────────────────────────────────
     function renderSummary() {
-      const counts = { P0_OUTDATED: 0, NEEDS_CLARIFICATION: 0, UP_TO_DATE: 0, EXCLUDED: 0 };
-      for (const r of allResults) { if (counts[r.classification] !== undefined) counts[r.classification]++; }
-      const total = allResults.length;
+      var counts = { P0_OUTDATED: 0, NEEDS_CLARIFICATION: 0, UP_TO_DATE: 0, EXCLUDED: 0 };
+      for (var i = 0; i < allResults.length; i++) {
+        if (counts[allResults[i].classification] !== undefined) counts[allResults[i].classification]++;
+      }
+      var total = allResults.length;
       document.getElementById('summaryBar').innerHTML =
         '<h2>' + escHtml(scenarioName) + '</h2>' +
         '<span class="badge badge-total">Total: ' + total + '</span>' +
@@ -377,49 +374,54 @@ export class ResultsPanel {
     }
 
     function populateRepoFilter() {
-      const repos = new Set();
-      for (const r of allResults) {
-        const rp = r.repo || repoFromUrl(r.url);
-        if (rp) repos.add(rp);
+      var repos = {};
+      for (var i = 0; i < allResults.length; i++) {
+        var rp = allResults[i].repo || repoFromUrl(allResults[i].url);
+        if (rp) repos[rp] = true;
       }
-      const sel = document.getElementById('filterRepo');
-      const sorted = Array.from(repos).sort();
-      // keep "All" option
-      sel.innerHTML = '<option value="">All</option>' +
-        sorted.map(rp => '<option value="' + escHtml(rp) + '">' + escHtml(rp) + '</option>').join('');
+      var sel = document.getElementById('filterRepo');
+      var sorted = Object.keys(repos).sort();
+      var opts = '<option value="">All</option>';
+      for (var j = 0; j < sorted.length; j++) {
+        opts += '<option value="' + escHtml(sorted[j]) + '">' + escHtml(sorted[j]) + '</option>';
+      }
+      sel.innerHTML = opts;
     }
 
     function filtered() {
-      const fc = document.getElementById('filterClass').value;
-      const fr = document.getElementById('filterRepo').value;
-      const fs = document.getElementById('filterSource').value;
-      const ft = document.getElementById('filterTriage').value;
-      const fq = document.getElementById('filterSearch').value.toLowerCase();
+      var fc = document.getElementById('filterClass').value;
+      var fr = document.getElementById('filterRepo').value;
+      var fs = document.getElementById('filterSource').value;
+      var ft = document.getElementById('filterTriage').value;
+      var fq = document.getElementById('filterSearch').value.toLowerCase();
 
-      return allResults.filter(r => {
-        if (fc && r.classification !== fc) return false;
-        const repo = r.repo || repoFromUrl(r.url);
-        if (fr && repo !== fr) return false;
-        const src = getSource(r);
-        if (fs && src !== fs) return false;
-        const tri = triageOf(r.url);
-        if (ft && tri !== ft) return false;
+      var out = [];
+      for (var i = 0; i < allResults.length; i++) {
+        var r = allResults[i];
+        if (fc && r.classification !== fc) continue;
+        var repo = r.repo || repoFromUrl(r.url);
+        if (fr && repo !== fr) continue;
+        var src = getSource(r);
+        if (fs && src !== fs) continue;
+        var tri = triageOf(r.url);
+        if (ft && tri !== ft) continue;
         if (fq) {
-          const haystack = [r.url, r.title, r.reason, r.evidence, r.regex_evidence, r.suggested_fix]
+          var haystack = [r.url, r.title, r.reason, r.evidence, r.regex_evidence, r.suggested_fix]
             .filter(Boolean).join(' ').toLowerCase();
-          if (!haystack.includes(fq)) return false;
+          if (haystack.indexOf(fq) === -1) continue;
         }
-        return true;
-      });
+        out.push(r);
+      }
+      return out;
     }
 
-    function sorted(rows) {
-      return rows.slice().sort((a, b) => {
-        let va, vb;
+    function sortedRows(rows) {
+      return rows.slice().sort(function(a, b) {
+        var va, vb;
         switch (sortCol) {
           case 'classification':
-            va = classOrder[a.classification] ?? 99;
-            vb = classOrder[b.classification] ?? 99;
+            va = classOrder[a.classification] !== undefined ? classOrder[a.classification] : 99;
+            vb = classOrder[b.classification] !== undefined ? classOrder[b.classification] : 99;
             break;
           case 'title':
             va = (a.title || titleFromUrl(a.url)).toLowerCase();
@@ -443,40 +445,46 @@ export class ResultsPanel {
     }
 
     function renderTable() {
-      const rows = sorted(filtered());
-      document.getElementById('showingCount').textContent =
-        'Showing ' + rows.length + ' of ' + allResults.length + ' results';
+      try {
+        var filt = filtered();
+        var rows = sortedRows(filt);
+        document.getElementById('showingCount').textContent =
+          'Showing ' + rows.length + ' of ' + allResults.length;
 
-      const tbody = document.getElementById('resultsBody');
-      let html = '';
-      for (const r of rows) {
-        const cls = r.classification || '';
-        const title = escHtml(r.title || titleFromUrl(r.url));
-        const url = escHtml(shortenUrl(r.url));
-        const repo = escHtml(r.repo || repoFromUrl(r.url));
-        const src = escHtml(getSource(r));
-        const sev = escHtml(severity(r));
-        const tri = triageOf(r.url);
-        const expanded = expandedUrl === r.url;
+        var tbody = document.getElementById('resultsBody');
+        var html = '';
+        for (var i = 0; i < rows.length; i++) {
+          var r = rows[i];
+          var cls = r.classification || '';
+          var title = escHtml(r.title || titleFromUrl(r.url));
+          var urlShort = escHtml(shortenUrl(r.url));
+          var repo = escHtml(r.repo || repoFromUrl(r.url));
+          var src = escHtml(getSource(r));
+          var sev = escHtml(severity(r));
+          var tri = triageOf(r.url);
+          var expanded = expandedUrl === r.url;
 
-        html += '<tr data-url="' + escHtml(r.url) + '">' +
-          '<td><span class="cls-badge cls-' + escHtml(cls) + '">' + escHtml(cls) + '</span></td>' +
-          '<td><div class="article-title">' + title + '</div><div class="article-url">' + url + '</div></td>' +
-          '<td>' + repo + '</td>' +
-          '<td>' + src + '</td>' +
-          '<td>' + sev + '</td>' +
-          '<td>' + triageButtons(r.url, tri) + '</td>' +
-          '</tr>';
+          html += '<tr data-url="' + escHtml(r.url) + '">' +
+            '<td><span class="cls-badge cls-' + escHtml(cls) + '">' + escHtml(cls) + '</span></td>' +
+            '<td><div class="article-title">' + title + '</div><div class="article-url">' + urlShort + '</div></td>' +
+            '<td>' + repo + '</td>' +
+            '<td>' + src + '</td>' +
+            '<td>' + sev + '</td>' +
+            '<td>' + triageButtons(r.url, tri) + '</td>' +
+            '</tr>';
 
-        if (expanded) {
-          html += detailRow(r);
+          if (expanded) {
+            html += detailRow(r);
+          }
         }
+        tbody.innerHTML = html;
+      } catch (e) {
+        console.error('[DocsCapacitor] Render error:', e);
       }
-      tbody.innerHTML = html;
     }
 
     function triageButtons(url, current) {
-      const safeUrl = escHtml(url);
+      var safeUrl = escHtml(url);
       return '<button class="triage-btn' + (current === 'valid' ? ' active-valid' : '') +
              '" data-triage="valid" data-url="' + safeUrl + '" title="Valid">\\u2713</button>' +
              '<button class="triage-btn' + (current === 'false_positive' ? ' active-false_positive' : '') +
@@ -486,14 +494,15 @@ export class ResultsPanel {
     }
 
     function detailRow(r) {
-      let inner = '';
+      var inner = '';
       if (r.reason) inner += detailSection('Reason', r.reason);
       if (r.evidence) inner += detailSection('Evidence', r.evidence);
       if (r.regex_evidence) inner += detailSection('Regex Evidence', r.regex_evidence);
       if (r.release_conflict_section) inner += detailSection('Release Conflict', r.release_conflict_section);
       if (r.llm_findings && r.llm_findings.length) {
         inner += '<div class="detail-section"><div class="detail-label">LLM Findings</div>';
-        for (const f of r.llm_findings) {
+        for (var fi = 0; fi < r.llm_findings.length; fi++) {
+          var f = r.llm_findings[fi];
           inner += '<div class="llm-card">';
           if (f.title) inner += '<div class="llm-title">' + escHtml(f.title) + '</div>';
           if (f.conflict) inner += '<div class="llm-field"><strong>Conflict:</strong> ' + escHtml(f.conflict) + '</div>';
@@ -516,46 +525,51 @@ export class ResultsPanel {
     }
 
     // ── sort headers ──────────────────────────────────────
-    document.querySelectorAll('thead th[data-col]').forEach(th => {
-      th.addEventListener('click', () => {
-        const col = th.getAttribute('data-col');
-        if (col === sortCol) { sortAsc = !sortAsc; }
-        else { sortCol = col; sortAsc = true; }
-        updateSortArrows();
-        renderTable();
-      });
-    });
+    var thList = document.querySelectorAll('thead th[data-col]');
+    for (var ti = 0; ti < thList.length; ti++) {
+      (function(th) {
+        th.addEventListener('click', function() {
+          var col = th.getAttribute('data-col');
+          if (col === sortCol) { sortAsc = !sortAsc; }
+          else { sortCol = col; sortAsc = true; }
+          updateSortArrows();
+          renderTable();
+        });
+      })(thList[ti]);
+    }
 
     function updateSortArrows() {
-      document.querySelectorAll('thead th[data-col]').forEach(th => {
-        const arrow = th.querySelector('.sort-arrow');
-        if (th.getAttribute('data-col') === sortCol) {
+      var ths = document.querySelectorAll('thead th[data-col]');
+      for (var ui = 0; ui < ths.length; ui++) {
+        var arrow = ths[ui].querySelector('.sort-arrow');
+        if (ths[ui].getAttribute('data-col') === sortCol) {
           arrow.textContent = sortAsc ? '\\u25B2' : '\\u25BC';
         } else {
           arrow.textContent = '';
         }
-      });
+      }
     }
 
     // ── filter events ─────────────────────────────────────
-    ['filterClass', 'filterRepo', 'filterSource', 'filterTriage'].forEach(id => {
-      document.getElementById(id).addEventListener('change', () => renderTable());
-    });
-    let searchTimer = 0;
-    document.getElementById('filterSearch').addEventListener('input', () => {
+    var filterIds = ['filterClass', 'filterRepo', 'filterSource', 'filterTriage'];
+    for (var fi2 = 0; fi2 < filterIds.length; fi2++) {
+      document.getElementById(filterIds[fi2]).addEventListener('change', function() { renderTable(); });
+    }
+    var searchTimer = 0;
+    document.getElementById('filterSearch').addEventListener('input', function() {
       clearTimeout(searchTimer);
-      searchTimer = setTimeout(() => renderTable(), 200);
+      searchTimer = setTimeout(function() { renderTable(); }, 200);
     });
 
     // ── table clicks (expand/triage/action links) ─────────
-    document.getElementById('resultsBody').addEventListener('click', (e) => {
-      const target = e.target;
+    document.getElementById('resultsBody').addEventListener('click', function(e) {
+      var target = e.target;
 
       // triage button
       if (target.classList && target.classList.contains('triage-btn')) {
         e.stopPropagation();
-        const url = target.getAttribute('data-url');
-        const decision = target.getAttribute('data-triage');
+        var url = target.getAttribute('data-url');
+        var decision = target.getAttribute('data-triage');
         vscode.postMessage({ command: 'triage', url: url, decision: decision });
         triageState.decisions[url] = decision;
         renderTable();
@@ -565,25 +579,25 @@ export class ResultsPanel {
       // action links in detail row
       if (target.classList && target.classList.contains('action-link')) {
         e.stopPropagation();
-        const action = target.getAttribute('data-action');
-        const url = target.getAttribute('data-url');
-        if (action === 'open') vscode.postMessage({ command: 'openUrl', url: url });
-        if (action === 'copy') vscode.postMessage({ command: 'copyUrl', url: url });
+        var action = target.getAttribute('data-action');
+        var aUrl = target.getAttribute('data-url');
+        if (action === 'open') vscode.postMessage({ command: 'openUrl', url: aUrl });
+        if (action === 'copy') vscode.postMessage({ command: 'copyUrl', url: aUrl });
         return;
       }
 
-      // row expand/collapse – walk up to the <tr>
-      let tr = target;
+      // row expand/collapse
+      var tr = target;
       while (tr && tr.tagName !== 'TR') tr = tr.parentElement;
       if (!tr || tr.classList.contains('detail-row')) return;
-      const url = tr.getAttribute('data-url');
-      expandedUrl = (expandedUrl === url) ? null : url;
+      var rowUrl = tr.getAttribute('data-url');
+      expandedUrl = (expandedUrl === rowUrl) ? null : rowUrl;
       renderTable();
     });
 
-    // ── messages from extension ───────────────────────────
-    window.addEventListener('message', (event) => {
-      const msg = event.data;
+    // ── messages from extension (refresh & triage updates) ─
+    window.addEventListener('message', function(event) {
+      var msg = event.data;
       switch (msg.command) {
         case 'setResults':
           allResults = msg.results || [];
@@ -601,23 +615,11 @@ export class ResultsPanel {
       }
     });
 
-    // render immediately with embedded data
-    console.log('[DocsCapacitor] Panel script loaded, requesting data...');
+    // ── initial render from embedded data ──────────────────
     renderSummary();
     populateRepoFilter();
     updateSortArrows();
     renderTable();
-
-    // Request data from extension — retry until we get it
-    vscode.postMessage({ command: 'ready' });
-    var retryInterval = setInterval(function() {
-      if (allResults.length > 0) {
-        clearInterval(retryInterval);
-        return;
-      }
-      console.log('[DocsCapacitor] Retrying data request...');
-      vscode.postMessage({ command: 'ready' });
-    }, 1000);
   })();
   </script>
 </body>
