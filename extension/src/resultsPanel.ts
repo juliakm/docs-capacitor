@@ -64,13 +64,12 @@ export class ResultsPanel {
     this.scenarioName = scenarioName;
     this.triageState = triageState;
 
-    this.panel.webview.html = this.getHtml();
-
-    this.panel.onDidDispose(() => this.dispose(), null, this.disposables);
-
     this.panel.webview.onDidReceiveMessage(
       (msg: { command: string; url?: string; decision?: TriageDecision }) => {
         switch (msg.command) {
+          case "ready":
+            this.pushResults();
+            break;
           case "triage":
             if (msg.url && msg.decision) {
               this.handleTriage(msg.url, msg.decision);
@@ -92,6 +91,10 @@ export class ResultsPanel {
       null,
       this.disposables,
     );
+
+    this.panel.webview.html = this.getHtml();
+
+    this.panel.onDidDispose(() => this.dispose(), null, this.disposables);
   }
 
   private dispose(): void {
@@ -108,16 +111,19 @@ export class ResultsPanel {
     ResultsPanel.onTriageCallback?.(url, decision);
   }
 
+  private pushResults(): void {
+    this.panel.webview.postMessage({
+      command: "setResults",
+      results: this.results,
+      scenarioName: this.scenarioName,
+      triageState: this.triageState,
+    });
+  }
+
   // ── HTML ──────────────────────────────────────────────────────────────
 
   public getHtml(): string {
     const nonce = getNonce();
-    const b64 = Buffer.from(JSON.stringify({
-      results: this.results,
-      scenarioName: this.scenarioName,
-      triageState: this.triageState,
-    })).toString("base64");
-
     return /* html */ `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -266,8 +272,6 @@ export class ResultsPanel {
     <span class="showing-count" id="showingCount"></span>
   </div>
 
-  <script type="application/json" id="initialData">\${b64}</script>
-
   <!-- table -->
   <table>
     <thead>
@@ -287,21 +291,19 @@ export class ResultsPanel {
   (function () {
     var vscode = acquireVsCodeApi();
 
-    // ── load embedded data via base64 ─────────────────────
-    var payload = {};
-    try {
-      var raw = document.getElementById('initialData').textContent || '';
-      payload = JSON.parse(atob(raw));
-    } catch (e) {
-      payload = { results: [], scenarioName: '', triageState: { decisions: {}, ignored_repos: [] } };
-    }
-
-    var allResults = payload.results || [];
-    var scenarioName = payload.scenarioName || '';
-    var triageState = payload.triageState || { decisions: {}, ignored_repos: [] };
+    var allResults = [];
+    var scenarioName = '';
+    var triageState = { decisions: {}, ignored_repos: [] };
     var sortCol = 'classification';
     var sortAsc = true;
     var expandedUrl = null;
+
+    function showHydrationError(message) {
+      var bar = document.getElementById('summaryBar');
+      bar.innerHTML = '<span class="badge badge-p0">Data load failed</span><span>' + escHtml(message) + '</span>';
+      document.getElementById('showingCount').textContent = '';
+      document.getElementById('resultsBody').innerHTML = '';
+    }
 
     // ── helpers ───────────────────────────────────────────
     function getSource(r) {
@@ -314,6 +316,7 @@ export class ResultsPanel {
     }
 
     function repoFromUrl(url) {
+      if (typeof url !== 'string') return '';
       var m = url.match(/github\\.com\\/([^/]+\\/[^/]+)/);
       if (m) return m[1];
       if (/learn\\.microsoft\\.com/.test(url)) return 'Microsoft Learn';
@@ -352,7 +355,34 @@ export class ResultsPanel {
     }
 
     function triageOf(url) {
+      if (!triageState || !triageState.decisions || typeof triageState.decisions !== 'object') {
+        return 'untriaged';
+      }
       return triageState.decisions[url] || 'untriaged';
+    }
+
+    function normalizeResult(item) {
+      var r = item && typeof item === 'object' ? item : {};
+      var url = typeof r.url === 'string' ? r.url : String(r.url || '');
+      return {
+        url: url,
+        title: r.title != null ? String(r.title) : '',
+        classification: r.classification != null ? String(r.classification) : '',
+        confidence: r.confidence,
+        topic: r.topic,
+        reason: r.reason != null ? String(r.reason) : '',
+        suggested_fix: r.suggested_fix != null ? String(r.suggested_fix) : '',
+        evidence: r.evidence != null ? String(r.evidence) : '',
+        regex_evidence: r.regex_evidence != null ? String(r.regex_evidence) : '',
+        regex_signals: Array.isArray(r.regex_signals) ? r.regex_signals : [],
+        regex_signal: r.regex_signal != null ? String(r.regex_signal) : '',
+        release_conflict_section: r.release_conflict_section != null ? String(r.release_conflict_section) : '',
+        agrees_with_regex: r.agrees_with_regex,
+        repo: r.repo != null ? String(r.repo) : '',
+        llm_findings: Array.isArray(r.llm_findings) ? r.llm_findings : [],
+        ms_date: r.ms_date,
+        date_flag: r.date_flag,
+      };
     }
 
     var classOrder = { 'P0_OUTDATED': 0, 'NEEDS_CLARIFICATION': 1, 'UP_TO_DATE': 2, 'EXCLUDED': 3 };
@@ -479,6 +509,8 @@ export class ResultsPanel {
         }
         tbody.innerHTML = html;
       } catch (e) {
+        var msg = (e && e.message) ? e.message : String(e);
+        showHydrationError('Render error: ' + msg);
         console.error('[DocsCapacitor] Render error:', e);
       }
     }
@@ -542,6 +574,7 @@ export class ResultsPanel {
       var ths = document.querySelectorAll('thead th[data-col]');
       for (var ui = 0; ui < ths.length; ui++) {
         var arrow = ths[ui].querySelector('.sort-arrow');
+        if (!arrow) continue;
         if (ths[ui].getAttribute('data-col') === sortCol) {
           arrow.textContent = sortAsc ? '\\u25B2' : '\\u25BC';
         } else {
@@ -600,9 +633,15 @@ export class ResultsPanel {
       var msg = event.data;
       switch (msg.command) {
         case 'setResults':
-          allResults = msg.results || [];
+          if (!msg || !Array.isArray(msg.results)) {
+            showHydrationError('Results payload is invalid. Reopen the panel after running a freshness check.');
+            return;
+          }
+          allResults = msg.results.map(normalizeResult);
           scenarioName = msg.scenarioName || '';
-          triageState = msg.triageState || { decisions: {}, ignored_repos: [] };
+          triageState = (msg.triageState && typeof msg.triageState === 'object')
+            ? msg.triageState
+            : { decisions: {}, ignored_repos: [] };
           renderSummary();
           populateRepoFilter();
           updateSortArrows();
@@ -615,11 +654,8 @@ export class ResultsPanel {
       }
     });
 
-    // ── initial render from embedded data ──────────────────
-    renderSummary();
-    populateRepoFilter();
-    updateSortArrows();
-    renderTable();
+    // Ask extension host to send deterministic panel data after script is ready.
+    vscode.postMessage({ command: 'ready' });
   })();
   </script>
 </body>
