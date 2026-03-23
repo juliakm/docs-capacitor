@@ -1,0 +1,13 @@
+# No regex rules for security-devops scenario.
+# Detection is handled entirely by LLM scoring rubric.
+
+filters:
+  exclude:
+    url_regex:
+      - release-notes
+      - whats-new
+      - CONTRIBUTING
+      - CHANGELOG
+      - LICENSE
+
+rules: []

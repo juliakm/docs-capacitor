@@ -1,0 +1,26 @@
+# Classification strategy for outdated-devops-tasks
+
+meta:
+  name: outdated-devops-tasks
+  version: "1.0"
+
+scope:
+  product_patterns:
+    - Azure DevOps
+
+hard_exclusions:
+  url_regex: []
+  repo_regex:
+    - -archive-pr$    # Exclude archived doc repos by default
+    - -archive-docs-pr$
+
+classification:
+  default_confidence:
+    p0_outdated: high
+    needs_clarification: medium
+    up_to_date: medium
+    excluded: high
+
+topic_rules: []
+# Add topic rules to classify findings into specific areas.
+# See scenarios/copilot-vs/strategy.yaml for examples.

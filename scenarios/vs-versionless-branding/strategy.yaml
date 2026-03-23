@@ -1,0 +1,59 @@
+# Classification strategy for vs-versionless-branding
+
+meta:
+  name: vs-versionless-branding
+  version: "1.0"
+
+scope:
+  product_patterns:
+    - \[Visual Studio(?!\s+Code)(?:\s+\d{4})?\]\([^)]+\)|\bVisual Studio(?!\s+Code)(?:\s+\d{4})?\b|\bVS\s+\d{4}\b
+
+hard_exclusions:
+  url_regex:
+    - release-notes
+    - whats-new
+    - whats-happening
+    - changelog
+    - version-history
+    - release-history
+    - visual-studio-code
+    - \/vscode\/
+    - github\.com/Azure/
+    - github\.com/MicrosoftDocs/CordovaDocs
+    - github\.com/MicrosoftDocs/DocsRoot
+    - github\.com/MicrosoftDocs/WindowsCommunityToolkitDocs
+    - github\.com/MicrosoftDocs/azure-devops-docs-archive-pr
+    - github\.com/MicrosoftDocs/Azure-Sphere-Developer-Learning-Path
+    - github\.com/MicrosoftDocs/AdaptiveCards
+    - github\.com/MicrosoftDocs/community-content
+    - \/sql\/tools\/whats-happening
+    - CONTRIBUTING\.md
+    - what-is-new
+  repo_regex:
+    - ^Azure/
+    - ^MicrosoftDocs/CordovaDocs$
+    - ^MicrosoftDocs/DocsRoot$
+    - ^MicrosoftDocs/WindowsCommunityToolkitDocs$
+    - ^MicrosoftDocs/azure-devops-docs-archive-pr$
+    - ^MicrosoftDocs/Azure-Sphere-Developer-Learning-Path$
+    - ^MicrosoftDocs/AdaptiveCards$
+    - ^MicrosoftDocs/biztalk-docs$
+    - ^MicrosoftDocs/Agent-Skills$
+  content_only_regex:
+    - (?i)\bVS\s*Code\b
+    - (?i)\bVisual\s+Studio\s+Code\b
+    - (?i)\bdeprecated\b
+    - (?i)\barchived\b
+    - (?i)\bretired\b
+    - (?i)\bend[- ]of[- ]life\b
+
+classification:
+  default_confidence:
+    p0_outdated: high
+    needs_clarification: medium
+    up_to_date: medium
+    excluded: high
+
+topic_rules: []
+# Add topic rules to classify findings into specific areas.
+# See scenarios/copilot-vs/strategy.yaml for examples.

@@ -26,7 +26,10 @@ search:
 
 url_filters:
   relevant: []               # Empty = all URLs accepted
-  skip: []                   # URL substrings to skip
+  skip:
+    - deprecated
+    - archived
+    - retired
 
 detection:
   regex_rules: rules.yaml    # Create a rules.yaml in this directory

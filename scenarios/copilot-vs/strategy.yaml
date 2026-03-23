@@ -8,6 +8,7 @@ meta:
     - "Only flag articles that explicitly tell users to install Copilot via Manage Extensions or the Marketplace."
     - "Articles that merely mention Copilot without install instructions are not outdated."
     - "Articles about 'Copilot for Azure' or Azure-specific Copilot extensions are NOT in scope."
+    - "Articles about MCP (Model Context Protocol) servers — including setup, usage examples, and integration scenarios — are NOT in scope. Do not flag these even if they mention Copilot or Visual Studio."
 
 scope:
   # Require "GitHub Copilot" (not just "copilot" alone) to avoid false positives
@@ -27,7 +28,25 @@ hard_exclusions:
     - '/mcp-server/'
     - '\bmcp\b'
     - 'security-copilot'
-  repo_regex: []
+    - 'deprecated'
+    - 'archived'
+    - 'retired'
+    - 'AGENTS\.md'
+    - 'learn\.microsoft\.com/.*/visualstudio/'
+  repo_regex:
+    - '(?i)[-_]deprecated$'
+    - '(?i)[-_]archived$'
+    - '(?i)[-_]retired$'
+    - '(?i)[-_]archive[-_]'
+    - ^MicrosoftDocs/visualstudio-docs$
+    - ^MicrosoftDocs/visualstudio-docs-pr$
+    - ^MicrosoftDocs/azure-databases-docs$
+    - ^MicrosoftDocs/businessapps-copilot-docs-pr$
+    - ^MicrosoftDocs/learn-bizapps-pr$
+    - ^MicrosoftDocs/mc-docs-pr$
+    - ^MicrosoftDocs/well-architected$
+    - ^dotnet/aspire$
+    - ^MicrosoftDocs/Agent-Skills$
 
 classification:
   default_confidence:
@@ -69,6 +88,9 @@ topic_rules:
         - '(?i)visual\s+studio\s+code'
         - '(?i)\bvs\s*code\b'
         - '(?i)\bvscode\b'
+        # MCP server content is not about Copilot install path
+        - '(?i)\bmcp\b.*server'
+        - '(?i)model\s+context\s+protocol'
     current_signals:
       any_regex:
         - '(?i)built.?in.*17\.\d+'

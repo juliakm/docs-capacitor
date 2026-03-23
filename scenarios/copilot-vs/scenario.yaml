@@ -24,6 +24,14 @@ search:
       - MicrosoftDocs/visualstudio-docs
       - MicrosoftDocs/visualstudio-docs-pr
       - MicrosoftDocs/visualstudio-docs-archive-pr
+      - MicrosoftDocs/azure-devops-docs-archive-pr
+      - MicrosoftDocs/azure-databases-docs
+      - MicrosoftDocs/businessapps-copilot-docs-pr
+      - MicrosoftDocs/learn-bizapps-pr
+      - MicrosoftDocs/mc-docs-pr
+      - MicrosoftDocs/well-architected
+      - dotnet/aspire
+      - MicrosoftDocs/Agent-Skills
     tracker: tracker.json
   learn:
     api_url: https://learn.microsoft.com/api/search
@@ -79,6 +87,10 @@ url_filters:
     - /release-notes/
     - copilot-for-azure
     - /mcp-server/
+    - deprecated
+    - archived
+    - retired
+    - AGENTS.md
 detection:
   regex_rules: rules.yaml
   llm:
@@ -93,6 +105,7 @@ detection:
       - Visual Studio Installer is the correct install path for Copilot components.
       - "EXCEPTION: GitHub Copilot for Azure is a separate extension that IS still installed via the marketplace."
       - "Articles about 'Copilot for Azure' or the Azure extension are NOT outdated when they reference marketplace install."
+      - "EXCEPTION: Articles about MCP (Model Context Protocol) servers — including setup, configuration, and example use cases — are NOT in scope for this review. MCP server content describes how AI tools interact with services like Azure DevOps; it is unrelated to how Copilot is installed in Visual Studio."
     max_article_chars: 8000
     rate_limit_rpm: 10
 classification:

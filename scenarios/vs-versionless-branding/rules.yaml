@@ -1,0 +1,74 @@
+# Regex detection rules for vs-versionless-branding
+# Flag articles that reference specific Visual Studio version years
+# when they should use versionless "Visual Studio" branding.
+
+filters:
+  exclude:
+    url_regex:
+      - release-notes
+      - whats-new
+      - changelog
+      - version-history
+      - release-history
+      - visual-studio-code
+      - \/vscode\/
+
+rules:
+  # Outdated versions that should definitely not appear in current docs
+  - id: VS_OLD_VERSION
+    title: "References outdated Visual Studio version (2017 or earlier)"
+    severity: P0
+    match:
+      any_regex:
+        - '(?i)\bVisual\s+Studio\s+201[0-7]\b(?!\s*Code)'
+        - '(?i)\bVS\s+201[0-7]\b'
+    unless:
+      any_regex:
+        - '(?i)\bdeprecated\b'
+        - '(?i)\barchived\b'
+        - '(?i)\bretired\b'
+        - '(?i)\bend[- ]of[- ]life\b'
+        - '(?i)\bno\s+longer\s+supported\b'
+        - '(?i)\bcompatibility\b.*\btable\b'
+        - '(?i)\bversion\s+history\b'
+        - '(?i)\bsystem\s+requirements\b'
+        - '(?i)Visual\s+Studio\s+Code'
+
+  # VS 2019 — still sometimes valid but generally should be versionless
+  - id: VS_2019
+    title: "References Visual Studio 2019"
+    severity: INFO
+    match:
+      any_regex:
+        - '(?i)\bVisual\s+Studio\s+2019\b(?!\s*Code)'
+        - '(?i)\bVS\s+2019\b'
+    unless:
+      any_regex:
+        - '(?i)\bdeprecated\b'
+        - '(?i)\barchived\b'
+        - '(?i)\bretired\b'
+        - '(?i)\bend[- ]of[- ]life\b'
+        - '(?i)\bcompatibility\b'
+        - '(?i)\bsystem\s+requirements\b'
+        - '(?i)\bmigrat(e|ion|ing)\b'
+        - '(?i)\bupgrade\b.*\bfrom\b'
+        - '(?i)Visual\s+Studio\s+Code'
+
+  # VS 2022 — valid when version-specific, but flag for review
+  - id: VS_2022
+    title: "References Visual Studio 2022 — verify version is necessary"
+    severity: INFO
+    match:
+      any_regex:
+        - '(?i)\bVisual\s+Studio\s+2022\b(?!\s*Code)'
+        - '(?i)\bVS\s+2022\b'
+    unless:
+      any_regex:
+        - '(?i)\bdeprecated\b'
+        - '(?i)\barchived\b'
+        - '(?i)\bretired\b'
+        - '(?i)\bsystem\s+requirements\b'
+        - '(?i)\bversion\s+17\.\d+'
+        - '(?i)\bcompatibility\b'
+        - '(?i)\bmigrat(e|ion|ing)\b'
+        - '(?i)Visual\s+Studio\s+Code'

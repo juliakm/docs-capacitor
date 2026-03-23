@@ -15,7 +15,13 @@ scope:
 hard_exclusions:
   url_regex:
     - 'release-notes'
-  repo_regex: []
+    - 'deprecated'
+    - 'archived'
+    - 'retired'
+  repo_regex:
+    - '(?i)[-_]deprecated$'
+    - '(?i)[-_]archived$'
+    - '(?i)[-_]retired$'
 
 classification:
   default_confidence:

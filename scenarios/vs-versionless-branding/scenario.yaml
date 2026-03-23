@@ -1,0 +1,221 @@
+name: vs-versionless-branding
+description: |
+  Looking for the use of Visual Studio with a number afterwards. We want it to use "Visual Studio" unless certain conditions are met. Visual Studio 2022 can be used if that's genuinely limited to that version.
+product:
+  name: Visual Studio
+search:
+  learn:
+    queries:
+      - Visual Studio 20
+      - Visual Studio
+      - Visual Studio 2019
+      - Visual Studio 2026
+  github:
+    orgs:
+      - MicrosoftDocs
+      - dotnet
+      - OfficeDev
+      - mspnp
+    queries:
+      - Visual Studio 20
+      - Visual Studio
+      - Visual Studio 2019
+      - Visual Studio 2017
+      - Visual Studio 2026
+    date_filter:
+      after: 01/01/2020
+      mode: exclude
+    excluded_repos:
+      - MicrosoftDocs/visualstudio-archive-docs-pr
+      - MicrosoftDocs/CordovaDocs
+      - MicrosoftDocs/DocsRoot
+      - MicrosoftDocs/WindowsCommunityToolkitDocs
+      - MicrosoftDocs/azure-devops-docs-archive-pr
+      - MicrosoftDocs/Azure-Sphere-Developer-Learning-Path
+      - MicrosoftDocs/AdaptiveCards
+      - MicrosoftDocs/community-content
+      - MicrosoftDocs/Agent-Skills
+    allowed_repos:
+      - azure-docs-pr
+      - learn-pr
+      - learnshared
+      - entra-docs-pr
+      - docs
+      - sql-docs-pr
+      - powerbi-docs-pr
+      - cpp-docs-pr
+      - azure-ai-docs-pr
+      - windowsserverdocs-pr
+      - data-tools-pr
+      - fabric-docs-pr
+      - windows-dev-docs-pr
+      - aspnetcore.docs
+      - azure-devops-docs-pr
+      - wsl
+      - powershell-docs
+      - visualstudio-docs-pr
+      - databricks-pr
+      - partner-center-pr
+      - azure-compute-docs-pr
+      - architecture-center-pr
+      - win32-pr
+      - windows-driver-docs-pr
+      - azure-docs-cli
+      - azure-monitor-docs-pr
+      - docsroot
+      - microsoft-graph-docs
+      - qna-navigation-v2
+      - recon
+      - azure-security-docs-pr
+      - azure-databases-docs-pr
+      - azure-aks-docs-pr
+      - entityframework.docs
+      - cloud-adoption-framework-pr
+      - azure-management-docs-pr
+      - powerquery-docs-pr
+      - azure-dev-docs-pr
+      - windows-app-pr
+      - azure-stack-docs-pr
+      - docs-desktop
+      - docs-maui
+      - iis-docs
+      - well-architected-pr
+      - security-pr
+      - data-integration-pr
+      - query-docs-pr
+      - docs.microsoft.com-nuget
+      - mixed-reality-pr
+      - msix-pr
+      - aspnetdocs
+      - docslegal-pr
+      - reliability-docs-pr
+      - ai-docs-pr
+      - systemcenterdocs-pr
+      - terminal
+      - dataexplorer-docs-pr
+      - fslogix-docs-pr
+      - java-docs-pr
+      - startups-content-pr
+      - bi-shared-docs-pr
+      - azure-docs-powershell
+      - windows-ai-docs-pr
+      - windows-iot-pr
+      - security-benchmark-docs-pr
+      - microsoftgraph-docs-powershell
+      - sdk-api-build
+      - biztalk-docs
+      - virtualization-documentation-private
+      - devops-resource-center-pr
+      - azure-devops-server-docs-pr
+      - microsoft-authentication-library-dotnet
+      - quantum-docs-private
+      - adaptivecards
+      - powerbi-rest-api-docs-pr
+      - azure-rmsdocs-pr
+      - data-api-builder-docs-pr
+      - fabric-rest-apis-docs
+      - iis.administration-docs
+      - powerbi-docs-javascript
+      - linux
+      - mimdocs-pr
+      - azure-video-indexer-pr
+      - powershell-docs-psget
+      - microsoft-cloud-pr
+      - appcenter-docs-pr
+      - console-docs
+      - platform-engineering-pr
+      - azure-openshift-docs-pr
+      - microsoft-authentication-library-javascript
+      - entra-powershell-docs-pr
+      - microsoft-for-healthcare-pr
+      - powershell-docs-modules
+      - powershell-docs-dsc
+      - docs-aspire
+      - playready
+      - microsoftcollaborateportal
+      - contribute
+      - docs-mobile
+      - microsoft-authentication-library-for-python
+      - azure-sphere-docs-pr
+      - sql-docs-powershell
+      - azure-china-pr
+      - solutions-playbook-pr
+      - live-share-pr
+      - hpc-docs-powershell
+      - microsoft-authentication-library-objc
+      - windows-compatibility
+      - azure-resource-manager-schema-reference-pr
+      - microsoft-authentication-library-android
+      - microsoft-authentication-library-java
+      - azure-policy-autogen-docs
+      - nosql-query-docs-pr
+      - azure-carbon-optimization-pr
+      - windowscommunitytoolkitdocs
+      - powerbi-docs-powershell
+      - msgraph-bicep-docs-pr
+      - microsoft-identity-web-docs-pr
+      - azure-docs-rest-apis
+      - microsoft-authentication-libraries-pr
+      - wdk-ddi-build
+      - winrt-related-pr
+      - azure-docs-powershell-azuread
+      - winrt-api-build
+      - emdocs-pr
+      - mesh-docs-pr
+      - azure-terraform-docs-pr
+      - security-powershell-pr
+      - msgraph-terraform-docs-pr
+      - cross-device
+      - winapps-win32-api-build
+      - accessibility-tools-docs
+      - microsoft-authentication-library-for-go
+      - azure-logic-apps-ref-pr
+      - winui-api-build
+      - mlnet-pr
+      - virtual-desktop-powershell-docs
+      - machine-learning-server-docs-pr
+      - dual-screen-docs-pr
+      - mim-docs-powershell
+      - azure-stack-docs-powershell
+      - dataprep-dotnet-pr
+      - azure-sphere-rest-api
+      - msonlinebackup-docs-powershell-pr
+      - azure-docs-sdk-cpp
+      - azure-docs-sdk-node
+      - windows-actions-source-generation
+      - winapps-winrt-api-build
+url_filters:
+  relevant: []
+  skip:
+    - /release-notes/
+    - /whats-new/
+    - /whats-happening
+    - /changelog
+    - /version-history
+    - /release-history
+    - github.com/Azure/
+    - deprecated
+    - archived
+    - retired
+    - /en-us/sql/tools/whats-happening
+detection:
+  regex_rules: rules.yaml
+  llm:
+    prompt_template: prompts/detect.md.j2
+    key_facts:
+      - Use the name "Visual Studio" without the year unless the context is that the specific version of Visual Studio is required
+      - Most of the time, "Visual Studio" will be the name listed
+      - If the content is about a deprecated, retired, or archived version of Visual Studio, it should not be flagged because we do not want to update old content that is no longer maintained. However, if the content is actively maintained and references a specific version of Visual Studio without a valid reason, it should be flagged for review.
+    max_article_chars: 8000
+    rate_limit_rpm: 10
+classification:
+  strategy: strategy.yaml
+  scope:
+    product_patterns:
+      - \[Visual Studio(?!\s+Code)(?:\s+\d{4})?\]\([^)]+\)|\bVisual Studio(?!\s+Code)(?:\s+\d{4})?\b|\bVS\s+\d{4}\b
+reporting:
+  title: vs-versionless-branding — Freshness Report
+  formats:
+    - markdown
+    - csv
+    - json

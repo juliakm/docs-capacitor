@@ -1,0 +1,122 @@
+# Azure CLI — Classification Strategy
+# Defines scope, topic rules, and confidence settings for the classifier.
+
+meta:
+  name: "azure-cli-command-freshness"
+  version: "1.0"
+  narrative_instructions:
+    - "Only flag articles that use deprecated commands or outdated syntax."
+    - "Articles that merely mention Azure CLI without showing commands are not outdated."
+
+scope:
+  product_patterns:
+    - 'azure\s+cli'
+    - '\baz\s+'
+  tool_patterns: []
+
+hard_exclusions:
+  url_regex:
+    - 'release-notes-azure-cli'
+    - '/cli/azure/release-notes'
+    - 'deprecated'
+    - 'archived'
+    - 'retired'
+  repo_regex:
+    - '(?i)[-_]deprecated$'
+    - '(?i)[-_]archived$'
+    - '(?i)[-_]retired$'
+
+classification:
+  default_confidence:
+    p0_outdated: "high"
+    needs_clarification: "medium"
+    up_to_date: "medium"
+    excluded: "high"
+
+topic_rules:
+  - id: deprecated-commands
+    title: "Deprecated CLI Commands"
+    area: commands
+    release_signals:
+      any_regex:
+        - '(?i)az\s+acs.*deprecated'
+        - '(?i)removed.*az\s+acs'
+    page_topic_signals:
+      any_regex:
+        - '(?i)\baz\s+acs\b'
+        - '(?i)azure\s+container\s+service\b'
+    stale_signals:
+      any_regex:
+        - '(?i)\baz\s+acs\s+(create|scale|delete|list|show)\b'
+        - '(?i)\baz\s+acs\s+kubernetes\b'
+    stale_exceptions:
+      any_regex:
+        - '(?i)deprecated.*az\s+acs'
+        - '(?i)replaced\s+by.*az\s+aks'
+        - '(?i)migrate.*to.*az\s+aks'
+    current_signals:
+      any_regex:
+        - '(?i)\baz\s+aks\s+(create|scale|delete|list|show)\b'
+        - '(?i)use\s+az\s+aks\s+instead'
+    narrative_instructions:
+      - "The deprecated-commands topic checks for articles that still use `az acs` commands."
+      - "Since ACS was retired, articles should reference `az aks` instead."
+
+  - id: auth-changes
+    title: "Authentication Method Changes"
+    area: auth
+    release_signals:
+      any_regex:
+        - '(?i)az\s+login.*deprecated'
+        - '(?i)password.*auth.*removed'
+    page_topic_signals:
+      any_regex:
+        - '(?i)\baz\s+login\b'
+        - '(?i)azure.*authentication'
+        - '(?i)service\s+principal.*login'
+    stale_signals:
+      any_regex:
+        - '(?i)\baz\s+login\s+--username\b'
+        - '(?i)\baz\s+login\s+-u\s+'
+        - '(?i)--username\s+.*--password\b'
+    stale_exceptions:
+      any_regex:
+        - '(?i)deprecated'
+        - '(?i)no\s+longer\s+recommended'
+        - '(?i)use\s+device\s+code'
+    current_signals:
+      any_regex:
+        - '(?i)\baz\s+login\b(?!.*--username)'
+        - '(?i)device\s+code.*flow'
+        - '(?i)managed\s+identity'
+        - '(?i)federated\s+credential'
+    narrative_instructions:
+      - "The auth-changes topic checks for articles that still use `az login --username --password`."
+      - "Modern auth should use device code flow, managed identity, or federated credentials."
+
+  - id: vm-image-format
+    title: "VM Image Format Changes"
+    area: compute
+    release_signals:
+      any_regex:
+        - '(?i)image\s+alias.*deprecated'
+        - '(?i)urn\s+format.*required'
+    page_topic_signals:
+      any_regex:
+        - '(?i)\baz\s+vm\s+create\b'
+        - '(?i)--image\b'
+    stale_signals:
+      any_regex:
+        - '(?i)--image\s+(UbuntuLTS|CentOS|Debian|openSUSE-Leap|RHEL|SLES|Win2019Datacenter|Win2016Datacenter)\b'
+    stale_exceptions:
+      any_regex:
+        - '(?i)deprecated'
+        - '(?i)use\s+urn'
+        - '(?i)publisher:offer:sku:version'
+    current_signals:
+      any_regex:
+        - '(?i)--image\s+\S+:\S+:\S+:\S+'
+        - '(?i)urn\s+format'
+    narrative_instructions:
+      - "The vm-image-format topic checks for articles using old image alias shortcuts."
+      - "Modern `az vm create` should use URN format (publisher:offer:sku:version)."

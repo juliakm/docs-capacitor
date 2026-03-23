@@ -1,0 +1,99 @@
+# Azure CLI — Scenario Configuration
+# Detects outdated Azure CLI command references in Microsoft Learn docs.
+
+name: "Azure CLI Command Freshness"
+description: >
+  Find Microsoft Learn articles that reference deprecated or outdated Azure CLI
+  commands, syntax, or installation instructions. Covers renamed commands
+  (az acs → az aks), deprecated authentication flows, and obsolete image formats.
+
+product:
+  name: "Azure CLI"
+
+search:
+  learn:
+    api_url: "https://learn.microsoft.com/api/search"
+    queries:
+      - "az group create"
+      - "az webapp create"
+      - "az container create"
+      - "az acs create"
+      - "az vm create image"
+      - "az login service principal"
+      - "az webapp log tail"
+      - "az aks create"
+    exclude_url_patterns:
+      - visual-studio-code
+      - vs-code
+      - powershell/module
+
+  github:
+    orgs:
+      - MicrosoftDocs
+      - Azure
+      - Azure-Samples
+    queries:
+      - '"az acs" create'
+      - '"az login --username"'
+      - '"az webapp log tail"'
+      - '"az vm create" --image'
+    excluded_repos: []
+    tracker: tracker.json
+
+url_filters:
+  relevant:
+    - /cli/azure/
+    - /azure/
+    - /training/modules/
+    - /training/paths/
+    - /azure/virtual-machines/
+    - /azure/app-service/
+    - /azure/container-instances/
+    - /azure/aks/
+  skip:
+    - /release-notes-azure-cli
+    - /cli/azure/release-notes
+    - /copilot/microsoft-365/
+    - /microsoft-365-copilot/
+    - /power-apps/
+    - /power-bi/
+    - /fabric/
+    - /shows/
+    - /office365/
+    - deprecated
+    - archived
+    - retired
+
+detection:
+  regex_rules: rules.yaml
+  llm:
+    key_facts:
+      - "Azure CLI is invoked via the `az` command."
+      - "The latest stable release notes are always at https://learn.microsoft.com/cli/azure/release-notes-azure-cli."
+      - "`az upgrade` is the recommended way to update the CLI — manual reinstall is no longer needed."
+      - "`az acs` (Azure Container Service) commands are deprecated and removed; use `az aks` for Kubernetes."
+      - "`az login --username --password` interactive password auth is deprecated; use `az login` with device code or managed identity."
+      - "`az vm create --image` now requires URN format (publisher:offer:sku:version), not old alias shortcuts."
+      - "`az webapp log tail` old positional syntax is replaced by `az webapp log tail --name <app> --resource-group <rg>`."
+      - "Service principal login should use `az login --service-principal` with federated credentials or certificates, not passwords."
+    max_article_chars: 8000
+    rate_limit_rpm: 10
+
+classification:
+  strategy: strategy.yaml
+  scope:
+    product_patterns:
+      - 'azure\s+cli'
+      - '\baz\s+'
+    tool_patterns: []
+
+release_notes:
+  url: "https://learn.microsoft.com/cli/azure/release-notes-azure-cli"
+  section_pattern: '\baz\b'
+  section_key: "product_sections"
+
+reporting:
+  title: "Azure CLI — Documentation Freshness Report"
+  formats:
+    - markdown
+    - csv

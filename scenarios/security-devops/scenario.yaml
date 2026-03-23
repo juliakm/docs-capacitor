@@ -1,0 +1,49 @@
+name: Security DevOps Content Review
+description: |
+  Evaluate Azure DevOps documentation for security gaps using a 10-dimension
+  rubric. Scores articles on identity, secrets, repos, connections, agents,
+  scripts, templates, resources, auditability, and incident response.
+product:
+  name: Azure DevOps
+  tool: Pipelines
+search:
+  local:
+    root: /Users/juliakm/Code/azure-devops-docs-pr/docs/pipelines
+    glob_pattern: "**/*.md"
+url_filters:
+  relevant: []
+  skip:
+    - /release-notes/
+    - /whats-new/
+    - CONTRIBUTING
+    - CHANGELOG
+    - LICENSE
+detection:
+  llm:
+    prompt_template: prompts/detect.md.j2
+    key_facts:
+      - "Use managed identities or OIDC instead of long-lived secrets for authentication."
+      - "Never hardcode secrets in pipeline YAML — use secret variables or Key Vault."
+      - "Pin task versions to specific major.minor to prevent supply chain attacks."
+      - "Use branch protections and require PR reviews before merging to protected branches."
+      - "Restrict service connection permissions to specific pipelines, not project-wide."
+      - "Use extends templates with required parameters to enforce security policies."
+      - "Self-hosted agents should be hardened and not shared across trust boundaries."
+      - "Enable audit logging for all pipeline security-sensitive operations."
+      - "Rotate secrets and tokens on a regular schedule and after any suspected breach."
+      - "Validate all pipeline inputs and parameters to prevent injection attacks."
+    max_article_chars: 8000
+    rate_limit_rpm: 30
+classification:
+  strategy: strategy.yaml
+  scope:
+    product_patterns:
+      - (?i)\bazure\s+devops\b
+      - (?i)\bpipeline[s]?\b
+    tool_patterns: []
+reporting:
+  title: Security DevOps — Content Review Report
+  formats:
+    - markdown
+    - csv
+    - json

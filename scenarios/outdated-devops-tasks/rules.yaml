@@ -1,0 +1,254 @@
+# Regex detection rules for outdated-devops-tasks
+# Patterns that match deprecated or outdated Azure DevOps pipeline task versions.
+
+filters:
+  include:
+    url_regex:
+      - "learn\\.microsoft\\.com"
+  exclude:
+    url_regex:
+      - release-notes
+
+rules:
+  # ── Fully deprecated tasks (replaced by a different task) ──────────────
+
+  - id: DEPRECATED_ANDROID_BUILD
+    title: "References deprecated AndroidBuild task (use Gradle)"
+    severity: P0
+    match:
+      any_regex:
+        - "AndroidBuild@\\d+"
+    unless:
+      any_regex: []
+
+  - id: DEPRECATED_COPY_PUBLISH
+    title: "References deprecated CopyPublishBuildArtifacts task"
+    severity: P0
+    match:
+      any_regex:
+        - "CopyPublishBuildArtifacts@\\d+"
+    unless:
+      any_regex: []
+
+  - id: DEPRECATED_DOTNET_INSTALLER
+    title: "References deprecated DotNetCoreInstaller (use UseDotNet@2)"
+    severity: P0
+    match:
+      any_regex:
+        - "DotNetCoreInstaller@\\d+"
+    unless:
+      any_regex: []
+
+  - id: DEPRECATED_NUGET_LEGACY
+    title: "References deprecated NuGet legacy task (use NuGetCommand@2)"
+    severity: P0
+    match:
+      any_regex:
+        - "NuGetPackager@\\d+"
+        - "NuGetPublisher@\\d+"
+        - "NuGetInstaller@\\d+"
+        - "NuGetRestore@\\d+"
+        - "\\bNuGet@0\\b"
+    unless:
+      any_regex: []
+
+  - id: DEPRECATED_TEST_AGENT
+    title: "References deprecated test agent task (use VSTest@3)"
+    severity: P0
+    match:
+      any_regex:
+        - "VSMobileCenterTest@\\d+"
+        - "RunVisualStudioTestsusingTestAgent@\\d+"
+        - "DeployVisualStudioTestAgent@\\d+"
+    unless:
+      any_regex: []
+
+  - id: DEPRECATED_CONDA
+    title: "References deprecated CondaEnvironment task"
+    severity: P0
+    match:
+      any_regex:
+        - "CondaEnvironment@\\d+"
+    unless:
+      any_regex: []
+
+  - id: DEPRECATED_MISC
+    title: "References deprecated task"
+    severity: P0
+    match:
+      any_regex:
+        - "AzureWebPowerShellDeployment@\\d+"
+        - "\\bIISWebAppDeployment@1\\b"
+        - "SqlServerDacpacDeployment@\\d+"
+        - "AzureMonitorAlerts@\\d+"
+        - "CacheBeta@\\d+"
+        - "\\bNodeTool@0\\b"
+        - "PyPIPublisher@\\d+"
+    unless:
+      any_regex: []
+
+  # ── Outdated versions (newer version of the same task exists) ──────────
+
+  - id: OUTDATED_POWERSHELL
+    title: "References outdated PowerShell@1 (current is @2)"
+    severity: P1
+    match:
+      any_regex:
+        - "\\bPowerShell@1\\b"
+    unless:
+      any_regex: []
+
+  - id: OUTDATED_AZURE_POWERSHELL
+    title: "References outdated AzurePowerShell version (current is @5)"
+    severity: P1
+    match:
+      any_regex:
+        - "AzurePowerShell@[1-4]\\b"
+    unless:
+      any_regex: []
+
+  - id: OUTDATED_AZURE_CLI
+    title: "References outdated AzureCLI version (current is @2)"
+    severity: P1
+    match:
+      any_regex:
+        - "AzureCLI@[01]\\b"
+    unless:
+      any_regex: []
+
+  - id: OUTDATED_AZURE_FILE_COPY
+    title: "References outdated AzureFileCopy version (current is @6)"
+    severity: P1
+    match:
+      any_regex:
+        - "AzureFileCopy@[1-5]\\b"
+    unless:
+      any_regex: []
+
+  - id: OUTDATED_DOCKER
+    title: "References outdated Docker version (current is @2)"
+    severity: P1
+    match:
+      any_regex:
+        - "\\bDocker@[01]\\b"
+    unless:
+      any_regex: []
+
+  - id: OUTDATED_DOTNET_CLI
+    title: "References outdated DotNetCoreCLI version (current is @2)"
+    severity: P1
+    match:
+      any_regex:
+        - "DotNetCoreCLI@[01]\\b"
+    unless:
+      any_regex: []
+
+  - id: OUTDATED_BUILD_TOOLS
+    title: "References outdated build task version"
+    severity: P1
+    match:
+      any_regex:
+        - "Gradle@[1-3]\\b"
+        - "Maven@[1-3]\\b"
+        - "Xcode@[2-4]\\b"
+        - "XcodePackageiOS@\\d+"
+        - "AndroidSigning@[12]\\b"
+        - "DockerCompose@0\\b"
+    unless:
+      any_regex: []
+
+  - id: OUTDATED_TEST_TASKS
+    title: "References outdated test task version"
+    severity: P1
+    match:
+      any_regex:
+        - "VSTest@[12]\\b"
+        - "PublishCodeCoverageResults@1\\b"
+        - "PublishTestResults@1\\b"
+        - "AppCenterDistribute@[0-2]\\b"
+    unless:
+      any_regex: []
+
+  - id: OUTDATED_DEPLOY_TASKS
+    title: "References outdated deploy task version"
+    severity: P1
+    match:
+      any_regex:
+        - "AzureRmWebAppDeployment@[2-4]\\b"
+        - "AzureFunctionApp@1\\b"
+        - "AzureContainerApps@0\\b"
+        - "AzureKeyVault@1\\b"
+        - "HelmDeploy@0\\b"
+        - "KubernetesManifest@0\\b"
+        - "Kubernetes@0\\b"
+        - "AzureCloudPowerShellDeployment@1\\b"
+        - "AzureVmssDeployment@0\\b"
+        - "PackerBuild@0\\b"
+        - "AzureResourceGroupDeployment@1\\b"
+    unless:
+      any_regex: []
+
+  - id: OUTDATED_UTILITY_TASKS
+    title: "References outdated utility task version"
+    severity: P1
+    match:
+      any_regex:
+        - "ArchiveFiles@1\\b"
+        - "CmdLine@1\\b"
+        - "CopyFiles@1\\b"
+        - "cURLUploader@1\\b"
+        - "FileTransform@1\\b"
+        - "FtpUpload@1\\b"
+        - "GitHubRelease@0\\b"
+        - "InstallAppleCertificate@[01]\\b"
+        - "InstallAppleProvisioningProfile@0\\b"
+        - "PublishSymbols@1\\b"
+        - "PublishPipelineArtifact@0\\b"
+        - "DownloadPipelineArtifact@[01]\\b"
+        - "DownloadBuildArtifacts@0\\b"
+        - "WindowsMachineFileCopy@1\\b"
+        - "ManualValidation@0\\b"
+        - "InvokeRESTAPI@0\\b"
+        - "\\bgulp@0\\b"
+        - "AzureFunction@[01]\\b"
+        - "PowerShellOnTargetMachines@[12]\\b"
+        - "PublishToAzureServiceBus@[01]\\b"
+    unless:
+      any_regex: []
+
+  - id: OUTDATED_PACKAGE_TASKS
+    title: "References outdated package task version"
+    severity: P1
+    match:
+      any_regex:
+        - "\\bNpm@0\\b"
+        - "NuGetAuthenticate@0\\b"
+        - "NuGetToolInstaller@0\\b"
+        - "PipAuthenticate@0\\b"
+        - "TwineAuthenticate@0\\b"
+    unless:
+      any_regex: []
+
+  - id: OUTDATED_TOOL_TASKS
+    title: "References outdated tool installer task version"
+    severity: P1
+    match:
+      any_regex:
+        - "HelmInstaller@0\\b"
+        - "JavaToolInstaller@0\\b"
+        - "DownloadPackage@0\\b"
+        - "JenkinsDownloadArtifacts@1\\b"
+        - "JenkinsQueueJob@1\\b"
+    unless:
+      any_regex: []
+
+  - id: OUTDATED_SONARQUBE
+    title: "References outdated SonarQube task version"
+    severity: P1
+    match:
+      any_regex:
+        - "SonarQubeAnalyze@[4-7]\\b"
+        - "SonarQubePrepare@[4-7]\\b"
+        - "SonarQubePublish@[4-7]\\b"
+    unless:
+      any_regex: []

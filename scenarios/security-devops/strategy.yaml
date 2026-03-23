@@ -1,0 +1,33 @@
+# Security DevOps — Classification Strategy
+# No regex rules for this scenario; classification is driven entirely by LLM scoring.
+
+meta:
+  name: security-devops-review
+  version: "1.0"
+
+scope:
+  product_patterns:
+    - (?i)\bazure\s+devops\b
+    - (?i)\bpipeline[s]?\b
+  tool_patterns: []
+
+hard_exclusions:
+  url_regex:
+    - release-notes
+    - whats-new
+    - CONTRIBUTING
+    - CHANGELOG
+    - LICENSE
+    - \.png$
+    - \.jpg$
+    - \.gif$
+  repo_regex: []
+
+classification:
+  default_confidence:
+    p0_outdated: high
+    needs_clarification: medium
+    up_to_date: medium
+    excluded: high
+
+topic_rules: []
