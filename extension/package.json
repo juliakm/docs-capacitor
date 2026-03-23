@@ -2,7 +2,7 @@
   "name": "docs-capacitor",
   "displayName": "Docs Capacitor — Documentation Freshness",
   "description": "Detect outdated references in Microsoft Learn documentation",
-  "version": "0.1.12",
+  "version": "0.1.13",
   "publisher": "microsoft",
   "license": "MIT",
   "engines": {
