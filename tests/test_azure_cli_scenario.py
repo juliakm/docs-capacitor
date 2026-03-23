@@ -5,6 +5,10 @@ from pathlib import Path
 import pytest
 
 SCENARIO_PATH = Path(__file__).resolve().parent.parent / "scenarios" / "azure-cli" / "scenario.yaml"
+pytestmark = pytest.mark.skipif(
+    not SCENARIO_PATH.exists(),
+    reason="Optional azure-cli scenario fixtures are not present in this checkout.",
+)
 
 
 class TestAzureCliScenarioLoading:
