@@ -1,7 +1,6 @@
 import * as vscode from "vscode";
 import * as fs from "fs";
 import * as path from "path";
-import * as yaml from "js-yaml";
 
 // ── YAML shape (partial, matches scenario.yaml fields we inspect) ────
 
@@ -18,6 +17,20 @@ interface ScenarioYaml {
   };
   classification?: { strategy?: string };
   reporting?: { formats?: string[] };
+}
+
+type YamlModule = {
+  load: (content: string) => unknown;
+  dump: (content: unknown, options?: { lineWidth?: number }) => string;
+};
+
+function loadYamlModule(): YamlModule {
+  try {
+    return require("js-yaml") as YamlModule;
+  } catch (error) {
+    const details = error instanceof Error ? error.message : String(error);
+    throw new Error(`Missing runtime dependency "js-yaml": ${details}`);
+  }
 }
 
 // ── Tree items ───────────────────────────────────────────────────────
@@ -198,6 +211,7 @@ export class ScenarioProvider implements vscode.TreeDataProvider<ScenarioTreeIte
 
   private addScenario(yamlPath: string): void {
     try {
+      const yaml = loadYamlModule();
       const raw = fs.readFileSync(yamlPath, "utf-8");
       const doc = yaml.load(raw) as ScenarioYaml | undefined;
       const stat = fs.statSync(yamlPath);
@@ -220,6 +234,7 @@ export class ScenarioProvider implements vscode.TreeDataProvider<ScenarioTreeIte
   private getComponents(item: ScenarioItem): ComponentItem[] {
     let doc: ScenarioYaml | undefined;
     try {
+      const yaml = loadYamlModule();
       doc = yaml.load(fs.readFileSync(item.scenarioPath, "utf-8")) as ScenarioYaml | undefined;
     } catch {
       return [];
@@ -314,6 +329,7 @@ export class ScenarioProvider implements vscode.TreeDataProvider<ScenarioTreeIte
     // Update name in the copied scenario.yaml
     const newYaml = path.join(dest, "scenario.yaml");
     if (fs.existsSync(newYaml)) {
+      const yaml = loadYamlModule();
       let content = await fs.promises.readFile(newYaml, "utf-8");
       const doc = yaml.load(content) as ScenarioYaml | undefined;
       if (doc?.name) {
@@ -386,6 +402,7 @@ export class ScenarioProvider implements vscode.TreeDataProvider<ScenarioTreeIte
   /** Generic helper: append a string value to a nested YAML list. */
   private appendToYamlList(filePath: string, keyPath: string[], value: string): void {
     try {
+      const yaml = loadYamlModule();
       const raw = fs.readFileSync(filePath, "utf-8");
       const doc = yaml.load(raw) as Record<string, unknown> | undefined;
       if (!doc) {

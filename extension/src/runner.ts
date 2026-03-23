@@ -34,6 +34,7 @@ const PROGRESS_PATTERNS: Array<{ re: RegExp; message: (m: RegExpMatchArray) => s
 ];
 
 const DEFAULT_TIMEOUT_MS = 15 * 60 * 1000;
+const EXTENSION_REPORT_FORMATS = ["json", "csv", "markdown"] as const;
 
 export class PipelineRunner {
   private outputChannel: vscode.OutputChannel;
@@ -42,6 +43,7 @@ export class PipelineRunner {
     private readonly pythonPath: string,
     private readonly workspaceRoot: string,
     channel?: vscode.OutputChannel,
+    private readonly extraEnv?: Record<string, string>,
   ) {
     this.outputChannel = channel ?? vscode.window.createOutputChannel("Docs Capacitor");
   }
@@ -51,19 +53,26 @@ export class PipelineRunner {
     pythonPath: string,
     workspaceRoot: string,
     channel: vscode.OutputChannel,
+    extraEnv?: Record<string, string>,
   ): PipelineRunner {
-    return new PipelineRunner(pythonPath, workspaceRoot, channel);
+    return new PipelineRunner(pythonPath, workspaceRoot, channel, extraEnv);
   }
 
   // ── public API ────────────────────────────────────────────────────
 
   runCheck(scenarioPath: string, outputDir: string, options?: RunOptions): Promise<RunResult> {
     const args = ["-m", "capacitor", "check", "-s", scenarioPath, "-o", outputDir];
+    for (const format of EXTENSION_REPORT_FORMATS) {
+      args.push("--format", format);
+    }
     return this.execute(args, "Freshness Check", options);
   }
 
   runDeepScan(scenarioPath: string, outputDir: string, localPath: string, options?: RunOptions): Promise<RunResult> {
     const args = ["-m", "capacitor", "check", "-s", scenarioPath, "-o", outputDir, "--local-path", localPath];
+    for (const format of EXTENSION_REPORT_FORMATS) {
+      args.push("--format", format);
+    }
     return this.execute(args, "Local Scan", options);
   }
 
@@ -78,6 +87,15 @@ export class PipelineRunner {
   }
 
   // ── internals ─────────────────────────────────────────────────────
+
+  private stopProcessTree(child: ChildProcess): void {
+    if (process.platform === "win32" && child.pid) {
+      // Ensure child process tree is terminated on Windows.
+      void spawn("taskkill", ["/PID", String(child.pid), "/T", "/F"], { windowsHide: true });
+      return;
+    }
+    child.kill();
+  }
 
   private async execute(
     args: string[],
@@ -121,6 +139,7 @@ export class PipelineRunner {
 
           const child: ChildProcess = spawn(this.pythonPath, args, {
             cwd: this.workspaceRoot,
+            env: { ...process.env, ...(this.extraEnv ?? {}) },
           });
 
           let output = "";
@@ -144,7 +163,7 @@ export class PipelineRunner {
 
           // Timeout handling
           const timer = setTimeout(() => {
-            child.kill();
+            this.stopProcessTree(child);
             const msg = `Pipeline timed out after ${timeoutMs / 1000}s`;
             this.outputChannel.appendLine(`\n${msg}`);
             resolve({ success: false, output: output + `\n${msg}`, exitCode: 1 });
@@ -152,7 +171,7 @@ export class PipelineRunner {
 
           // Cancellation handling
           const cancelListener = combined.onCancellationRequested(() => {
-            child.kill();
+            this.stopProcessTree(child);
             this.outputChannel.appendLine("\nPipeline cancelled by user.");
             resolve({ success: false, output: output + "\nCancelled.", exitCode: 1 });
           });

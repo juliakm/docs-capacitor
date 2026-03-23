@@ -1,5 +1,6 @@
 import * as vscode from "vscode";
 import * as path from "path";
+import * as fs from "fs";
 import { ResultsProvider, PageResult, LlmFinding } from "./resultsProvider";
 import { PipelineRunner } from "./runner";
 import { ScenarioWizardPanel } from "./wizardPanel";
@@ -8,26 +9,148 @@ import { SettingsPanel } from "./settingsPanel";
 import { ScenarioProvider, ScenarioItem } from "./scenarioProvider";
 import { showSetupReport, activationCheck, runAllChecks } from "./setupChecker";
 import { analyzeTriage, TriageAnalysis, TriageSuggestion, ScenarioConfig } from "./triageAnalyzer";
+import { ensureBundledRuntime } from "./runtimeBootstrap";
 
 const OUTPUT_CHANNEL_NAME = "Docs Capacitor";
 
 let outputChannel: vscode.OutputChannel;
 let statusBarItem: vscode.StatusBarItem;
 
+function readBundledRuntimeVersion(extensionPath: string): string | undefined {
+  try {
+    const initPath = path.join(extensionPath, "python-src", "capacitor", "__init__.py");
+    if (!fs.existsSync(initPath)) { return undefined; }
+    const text = fs.readFileSync(initPath, "utf-8");
+    const match = text.match(/^__version__\s*=\s*"([^"]+)"/m);
+    return match?.[1];
+  } catch {
+    return undefined;
+  }
+}
+
+function readInstalledRuntimeMarker(context: vscode.ExtensionContext): string | undefined {
+  try {
+    const marker = path.join(context.globalStorageUri.fsPath, "python-runtime", ".runtime-version");
+    if (!fs.existsSync(marker)) { return undefined; }
+    return fs.readFileSync(marker, "utf-8").trim() || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function logStartupVersionInfo(context: vscode.ExtensionContext): void {
+  const extensionVersion = String(context.extension.packageJSON?.version ?? "unknown");
+  const bundledRuntimeVersion = readBundledRuntimeVersion(context.extensionPath) ?? "unknown";
+  const installedRuntimeVersion = readInstalledRuntimeMarker(context) ?? "not-installed";
+
+  outputChannel.appendLine(`[startup] Extension version: ${extensionVersion}`);
+  outputChannel.appendLine(`[startup] Bundled runtime source version: ${bundledRuntimeVersion}`);
+  outputChannel.appendLine(`[startup] Installed runtime marker version: ${installedRuntimeVersion}`);
+}
+
 /** Build a PipelineRunner using current workspace settings. */
-function createRunner(): PipelineRunner {
+async function createRunner(context: vscode.ExtensionContext): Promise<PipelineRunner> {
   const config = vscode.workspace.getConfiguration("docs-capacitor");
-  const pythonPath = config.get<string>("pythonPath", "python3");
+  const configuredPython = config.get<string>("pythonPath", "python");
   const cwd = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? process.cwd();
   const timeoutMs = config.get<number>("timeoutMs", 300_000);
+  const learnServiceUrl = config.get<string>("learnKnowledgeServiceUrl", "");
+  const learnServiceScope = config.get<string>("learnKnowledgeServiceScope", "");
+  const usePublicLearnFallback = config.get<boolean>("usePublicLearnFallback", true);
+  const extraEnv: Record<string, string> = {};
+  if (learnServiceUrl.trim()) { extraEnv.LEARN_KNOWLEDGE_SERVICE_URL = learnServiceUrl.trim(); }
+  if (learnServiceScope.trim()) { extraEnv.LEARN_KNOWLEDGE_SERVICE_SCOPE = learnServiceScope.trim(); }
+  extraEnv.USE_PUBLIC_LEARN_FALLBACK = usePublicLearnFallback ? "true" : "false";
+  const pythonPath = await ensureBundledRuntime(context, configuredPython, outputChannel);
   // timeoutMs is stored on the runner for convenience but passed per-call via RunOptions
   void timeoutMs;
-  return PipelineRunner.withOutputChannel(pythonPath, cwd, outputChannel);
+  return PipelineRunner.withOutputChannel(pythonPath, cwd, outputChannel, extraEnv);
 }
 
 /** Read the configured (or default) timeout in ms. */
 function getTimeoutMs(): number {
   return vscode.workspace.getConfiguration("docs-capacitor").get<number>("timeoutMs", 300_000);
+}
+
+function scenarioUsesLearnSource(scenarioPath: string): boolean {
+  try {
+    const fs = require("fs") as typeof import("fs");
+    const yaml = require("js-yaml");
+    const raw = fs.readFileSync(scenarioPath, "utf-8");
+    const doc = yaml.load(raw) as { search?: { learn?: { queries?: string[] } } } | undefined;
+    return (doc?.search?.learn?.queries?.length ?? 0) > 0;
+  } catch {
+    return false;
+  }
+}
+
+async function ensureLearnPreflightReady(scenarioPath: string): Promise<boolean> {
+  if (!scenarioUsesLearnSource(scenarioPath)) {
+    return true;
+  }
+  const config = vscode.workspace.getConfiguration("docs-capacitor");
+  const allowFallback = config.get<boolean>("usePublicLearnFallback", true);
+  const checks = await runAllChecks();
+  const learnAccess = checks.find((c) => c.name === "Learn access");
+  const learnAuth = checks.find((c) => c.name === "Learn service auth");
+  const ok = Boolean(learnAccess?.ok) && Boolean(learnAuth?.ok);
+  if (ok) {
+    return true;
+  }
+
+  const reason = [learnAccess?.message, learnAuth?.message].filter(Boolean).join(" | ");
+  if (allowFallback) {
+    vscode.window.showWarningMessage(`Internal Learn checks failed. Using public Learn fallback. ${reason}`);
+    return true;
+  }
+
+  const action = await vscode.window.showErrorMessage(
+    `Internal Learn checks failed: ${reason || "configuration missing"}.`,
+    "Open Setup & Configuration",
+  );
+  if (action) {
+    await vscode.commands.executeCommand("docs-capacitor.setupEnvironment");
+  }
+  return false;
+}
+
+async function openSetupEnvironment(extensionUri: vscode.Uri): Promise<void> {
+  SettingsPanel.createOrShow(extensionUri);
+
+  // Run checks and send state to the panel
+  const checks = await runAllChecks();
+
+  // Read current settings
+  const config = vscode.workspace.getConfiguration("docs-capacitor");
+  const pythonPath = config.get<string>("pythonPath", "python");
+  const timeoutMs = config.get<number>("timeoutMs", 1800000);
+  const scenarioPaths = config.get<string[]>("scenarioPaths", []);
+  const learnKnowledgeServiceUrl = config.get<string>("learnKnowledgeServiceUrl", "");
+  const learnKnowledgeServiceScope = config.get<string>("learnKnowledgeServiceScope", "");
+  const usePublicLearnFallback = config.get<boolean>("usePublicLearnFallback", true);
+
+  // Read GITHUB_MODELS_USER from .env
+  let modelsUser = process.env.GITHUB_MODELS_USER ?? "";
+  const cwd = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+  if (!modelsUser && cwd) {
+    try {
+      const envPath = require("path").join(cwd, ".env");
+      const envContent = require("fs").readFileSync(envPath, "utf-8") as string;
+      const match = envContent.match(/GITHUB_MODELS_USER\s*=\s*(.+)/);
+      if (match) { modelsUser = match[1].trim(); }
+    } catch { /* no .env */ }
+  }
+
+  SettingsPanel.postState(
+    checks,
+    modelsUser,
+    pythonPath,
+    timeoutMs,
+    scenarioPaths,
+    learnKnowledgeServiceUrl,
+    learnKnowledgeServiceScope,
+    usePublicLearnFallback,
+  );
 }
 
 /** Discover scenario.yaml files in the workspace and configured paths. */
@@ -142,6 +265,23 @@ async function pickScenario(title: string): Promise<string | undefined> {
 
 export function activate(context: vscode.ExtensionContext): void {
   outputChannel = vscode.window.createOutputChannel(OUTPUT_CHANNEL_NAME);
+  logStartupVersionInfo(context);
+
+  let scenarioProvider: ScenarioProvider | undefined;
+
+  // Register critical commands first so they remain available even if view init fails.
+  context.subscriptions.push(
+    vscode.commands.registerCommand("docs-capacitor.setupEnvironment", async () => {
+      await openSetupEnvironment(context.extensionUri);
+    }),
+    vscode.commands.registerCommand("docs-capacitor.scenario.refresh", () => {
+      if (!scenarioProvider) {
+        vscode.window.showWarningMessage("Scenarios view is still initializing. Try refresh again.");
+        return;
+      }
+      scenarioProvider.refresh();
+    }),
+  );
 
   // Status bar: last check time
   statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 0);
@@ -151,22 +291,28 @@ export function activate(context: vscode.ExtensionContext): void {
   statusBarItem.show();
   context.subscriptions.push(statusBarItem);
 
-  const resultsProvider = new ResultsProvider();
-  const resultsTreeView = vscode.window.createTreeView("docsCapacitorResults", {
-    treeDataProvider: resultsProvider,
-    showCollapseAll: true,
-  });
-  resultsProvider.setTreeView(resultsTreeView);
-  context.subscriptions.push(resultsTreeView);
+  let resultsProvider: ResultsProvider;
+  try {
+    resultsProvider = new ResultsProvider();
+    const resultsTreeView = vscode.window.createTreeView("docsCapacitorResults", {
+      treeDataProvider: resultsProvider,
+      showCollapseAll: true,
+    });
+    resultsProvider.setTreeView(resultsTreeView);
+    context.subscriptions.push(resultsTreeView);
 
-  const scenarioProvider = new ScenarioProvider();
-  vscode.window.registerTreeDataProvider("docsCapacitorScenarios", scenarioProvider);
+    scenarioProvider = new ScenarioProvider();
+    vscode.window.registerTreeDataProvider("docsCapacitorScenarios", scenarioProvider);
+  } catch (error) {
+    outputChannel.appendLine(`[activate] Failed to initialize views: ${String(error)}`);
+    void vscode.window.showErrorMessage(
+      "Docs Capacitor failed to initialize some views. Open 'Docs Capacitor' output for details.",
+    );
+    return;
+  }
 
   // --- Scenario tree commands ---
   context.subscriptions.push(
-    vscode.commands.registerCommand("docs-capacitor.scenario.refresh", () => {
-      scenarioProvider.refresh();
-    }),
     vscode.commands.registerCommand("docs-capacitor.scenario.runCheck", (item: ScenarioItem) => {
       scenarioProvider.runCheck(item);
     }),
@@ -466,7 +612,9 @@ export function activate(context: vscode.ExtensionContext): void {
       if (!scenarioPath) {
         return;
       }
-
+      if (!(await ensureLearnPreflightReady(scenarioPath))) {
+        return;
+      }
       // Animate status bar while running
       statusBarItem.text = "$(sync~spin) Capacitor: Running…";
       statusBarItem.tooltip = "Freshness check in progress — click to cancel";
@@ -475,7 +623,7 @@ export function activate(context: vscode.ExtensionContext): void {
       const scenarioName = path.basename(path.dirname(scenarioPath));
       const scenarioParent = path.dirname(path.dirname(scenarioPath));
       const outputDir = path.join(scenarioParent, "output", scenarioName);
-      const runner = createRunner();
+      const runner = await createRunner(context);
       const result = await runner.runCheck(scenarioPath, outputDir, { timeoutMs: getTimeoutMs() });
 
       // Restore status bar
@@ -502,7 +650,9 @@ export function activate(context: vscode.ExtensionContext): void {
       if (!scenarioPath) {
         return;
       }
-
+      if (!(await ensureLearnPreflightReady(scenarioPath))) {
+        return;
+      }
       let localPath = typeof localPathArg === "string" ? localPathArg : undefined;
       if (!localPath) {
         const folderUri = await vscode.window.showOpenDialog({
@@ -524,7 +674,7 @@ export function activate(context: vscode.ExtensionContext): void {
       const scenarioName = path.basename(path.dirname(scenarioPath));
       const scenarioParent = path.dirname(path.dirname(scenarioPath));
       const outputDir = path.join(scenarioParent, "output", scenarioName);
-      const runner = createRunner();
+      const runner = await createRunner(context);
       const result = await runner.runDeepScan(scenarioPath, outputDir, localPath, { timeoutMs: getTimeoutMs() });
 
       statusBarItem.backgroundColor = undefined;
@@ -533,7 +683,7 @@ export function activate(context: vscode.ExtensionContext): void {
         statusBarItem.text = `$(beaker) Capacitor ✓ ${now}`;
         statusBarItem.tooltip = `Local scan: ${scenarioName} at ${now}`;
         vscode.window.showInformationMessage(`✅ Local scan complete for ${scenarioName} — see Results panel.`);
-        resultsProvider.loadScenario(scenarioName);
+        resultsProvider.loadScenario(`${scenarioName} (Local)`);
       } else {
         statusBarItem.text = "$(beaker) Capacitor ✗ Failed";
         statusBarItem.tooltip = "Deep scan failed — click to retry";
@@ -551,7 +701,7 @@ export function activate(context: vscode.ExtensionContext): void {
         return;
       }
 
-      const runner = createRunner();
+      const runner = await createRunner(context);
       const result = await runner.runValidate(scenarioPath, { timeoutMs: getTimeoutMs() });
 
       if (result.success) {
@@ -585,40 +735,16 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
   );
 
-  // --- Setup Environment / Settings ---
-  context.subscriptions.push(
-    vscode.commands.registerCommand("docs-capacitor.setupEnvironment", async () => {
-      SettingsPanel.createOrShow(context.extensionUri);
-
-      // Run checks and send state to the panel
-      const checks = await runAllChecks();
-
-      // Read current settings
-      const config = vscode.workspace.getConfiguration("docs-capacitor");
-      const pythonPath = config.get<string>("pythonPath", "python3");
-      const timeoutMs = config.get<number>("timeoutMs", 1800000);
-      const scenarioPaths = config.get<string[]>("scenarioPaths", []);
-
-      // Read GITHUB_MODELS_USER from .env
-      let modelsUser = process.env.GITHUB_MODELS_USER ?? "";
-      const cwd = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-      if (!modelsUser && cwd) {
-        try {
-          const envPath = require("path").join(cwd, ".env");
-          const envContent = require("fs").readFileSync(envPath, "utf-8") as string;
-          const match = envContent.match(/GITHUB_MODELS_USER\s*=\s*(.+)/);
-          if (match) { modelsUser = match[1].trim(); }
-        } catch { /* no .env */ }
-      }
-
-      SettingsPanel.postState(checks, modelsUser, pythonPath, timeoutMs, scenarioPaths);
-    }),
-  );
-
   // --- Settings Panel Message Handlers ---
   SettingsPanel.onMessage = async (msg) => {
     switch (msg.command) {
       case "checkStatus": {
+        const checks = await runAllChecks();
+        SettingsPanel.postStatusUpdate(checks);
+        break;
+      }
+      case "runFullSetupCheck": {
+        await showSetupReport(outputChannel);
         const checks = await runAllChecks();
         SettingsPanel.postStatusUpdate(checks);
         break;
@@ -628,6 +754,10 @@ export function activate(context: vscode.ExtensionContext): void {
         const terminal = vscode.window.createTerminal("GitHub Auth");
         terminal.show();
         terminal.sendText("gh auth login -h github.com");
+        break;
+      }
+      case "openGhCliInstall": {
+        await vscode.env.openExternal(vscode.Uri.parse("https://cli.github.com/"));
         break;
       }
       case "saveModelsUser": {
@@ -670,14 +800,41 @@ export function activate(context: vscode.ExtensionContext): void {
         }
         break;
       }
+      case "testLearnConnection": {
+        const checks = await runAllChecks();
+        SettingsPanel.postStatusUpdate(checks);
+        const learnAccess = checks.find((c) => c.name === "Learn access");
+        const learnAuth = checks.find((c) => c.name === "Learn service auth");
+        const success = Boolean(learnAccess?.ok) && Boolean(learnAuth?.ok);
+        const message = success
+          ? "Internal Learn service is reachable and authenticated."
+          : [learnAccess?.message, learnAuth?.message].filter(Boolean).join(" | ");
+        SettingsPanel.postLearnTestResult(success, message || "Learn connection test failed.");
+        break;
+      }
       case "saveSettings": {
-        const { pythonPath, timeoutMs, scenarioPaths } = msg as {
-          pythonPath?: string; timeoutMs?: number; scenarioPaths?: string[];
+        const {
+          pythonPath,
+          timeoutMs,
+          scenarioPaths,
+          learnKnowledgeServiceUrl,
+          learnKnowledgeServiceScope,
+          usePublicLearnFallback,
+        } = msg as {
+          pythonPath?: string;
+          timeoutMs?: number;
+          scenarioPaths?: string[];
+          learnKnowledgeServiceUrl?: string;
+          learnKnowledgeServiceScope?: string;
+          usePublicLearnFallback?: boolean;
         };
         const config = vscode.workspace.getConfiguration("docs-capacitor");
         if (pythonPath !== undefined) { await config.update("pythonPath", pythonPath, true); }
         if (timeoutMs !== undefined) { await config.update("timeoutMs", timeoutMs, true); }
         if (scenarioPaths !== undefined) { await config.update("scenarioPaths", scenarioPaths, true); }
+        if (learnKnowledgeServiceUrl !== undefined) { await config.update("learnKnowledgeServiceUrl", learnKnowledgeServiceUrl, true); }
+        if (learnKnowledgeServiceScope !== undefined) { await config.update("learnKnowledgeServiceScope", learnKnowledgeServiceScope, true); }
+        if (usePublicLearnFallback !== undefined) { await config.update("usePublicLearnFallback", usePublicLearnFallback, true); }
         vscode.window.showInformationMessage("Settings saved.");
         break;
       }

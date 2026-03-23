@@ -55,13 +55,6 @@ See `extension/` for the VS Code extension that provides a GUI for managing scen
 
 For install, quick-start, and troubleshooting instructions used by coworkers, see `extension/README.md`.
 
-## Release & artifact hygiene
-
-- Keep source and extension in this single repo.
-- Do not commit old `.vsix` files to git.
-- Build VSIX in CI and store binaries as workflow/release artifacts.
-- Tag versions (`vX.Y.Z`) for reproducible rollbacks.
-
 ## Development
 
 ```bash

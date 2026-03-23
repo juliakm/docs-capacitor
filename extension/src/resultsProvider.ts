@@ -183,23 +183,62 @@ export class ResultsProvider implements vscode.TreeDataProvider<ResultItem> {
   private meta: { actionable: number; non_actionable: number; date_excluded: number; total: number } | undefined;
   /** The scenario whose results are currently displayed. */
   private activeScenario: string | undefined;
+  private initialLoadTimer: NodeJS.Timeout | undefined;
+  private scenarioRetryTimers: NodeJS.Timeout[] = [];
 
   constructor() {
-    this.loadResults();
+    // Defer loading until tree view is bound.
+    vscode.workspace.onDidChangeConfiguration((e) => {
+      if (e.affectsConfiguration("docs-capacitor.scenarioPaths")) {
+        this.refresh();
+      }
+    });
   }
 
   /** Bind the tree view so we can update its message (summary bar). */
   setTreeView(view: vscode.TreeView<ResultItem>): void {
     this.treeView = view;
-    this.updateSummaryMessage();
+    if (this.initialLoadTimer) {
+      clearTimeout(this.initialLoadTimer);
+    }
+    // Allow workspace configuration to settle before first results load.
+    this.initialLoadTimer = setTimeout(() => {
+      this.loadResults();
+      this._onDidChangeTreeData.fire();
+      this.updateSummaryMessage();
+    }, 500);
   }
 
   /** Load results for a specific scenario and refresh the tree. */
   loadScenario(scenarioName: string): void {
+    for (const t of this.scenarioRetryTimers) {
+      clearTimeout(t);
+    }
+    this.scenarioRetryTimers = [];
+
     this.activeScenario = scenarioName;
     this.loadResults();
     this._onDidChangeTreeData.fire();
     this.updateSummaryMessage();
+
+    if (this.results.length > 0) {
+      return;
+    }
+
+    // On some Windows runs, result files appear moments after process exit.
+    // Retry briefly so users don't need manual "Load Results from File".
+    const retryDelays = [400, 1200];
+    for (const delay of retryDelays) {
+      const timer = setTimeout(() => {
+        if (this.activeScenario !== scenarioName || this.results.length > 0) {
+          return;
+        }
+        this.loadResults();
+        this._onDidChangeTreeData.fire();
+        this.updateSummaryMessage();
+      }, delay);
+      this.scenarioRetryTimers.push(timer);
+    }
   }
 
   /** Reload data from disk and refresh the tree. */
@@ -243,9 +282,17 @@ export class ResultsProvider implements vscode.TreeDataProvider<ResultItem> {
             if (fs.existsSync(jsonPath) && !scenarios.includes(entry.name)) {
               scenarios.push(entry.name);
             }
+            const csvPath = path.join(outputDir, entry.name, "report.csv");
+            if (fs.existsSync(csvPath) && !scenarios.includes(entry.name)) {
+              scenarios.push(entry.name);
+            }
             const localJsonPath = path.join(outputDir, entry.name, "classifications-local.json");
             const localLabel = entry.name + " (Local)";
             if (fs.existsSync(localJsonPath) && !scenarios.includes(localLabel)) {
+              scenarios.push(localLabel);
+            }
+            const localCsvPath = path.join(outputDir, entry.name, "report-local.csv");
+            if (fs.existsSync(localCsvPath) && !scenarios.includes(localLabel)) {
               scenarios.push(localLabel);
             }
           }
@@ -257,22 +304,69 @@ export class ResultsProvider implements vscode.TreeDataProvider<ResultItem> {
 
   /** Collect all output directories: workspace + scenarioPaths siblings. */
   private getOutputDirs(): string[] {
-    const dirs: string[] = [];
+    const dirs = new Set<string>();
     const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
     if (workspaceRoot) {
-      dirs.push(path.join(workspaceRoot, "output"));
+      dirs.add(path.resolve(path.join(workspaceRoot, "output")));
     }
     const scenarioPaths = vscode.workspace
       .getConfiguration("docs-capacitor")
       .get<string[]>("scenarioPaths", []);
     for (const sp of scenarioPaths) {
-      const resolved = path.isAbsolute(sp) ? sp : (workspaceRoot ? path.join(workspaceRoot, sp) : sp);
-      const outputSibling = path.join(resolved, "..", "output");
-      // scenarioPaths may point to the parent of scenarios, so also check <sp>/output
-      dirs.push(path.resolve(outputSibling));
-      dirs.push(path.join(resolved, "output"));
+      const resolved = path.resolve(path.isAbsolute(sp) ? sp : (workspaceRoot ? path.join(workspaceRoot, sp) : sp));
+      const candidateDirs = new Set<string>();
+      const addCandidate = (candidate: string): void => {
+        candidateDirs.add(path.resolve(candidate));
+      };
+
+      try {
+        const stat = fs.statSync(resolved);
+        if (stat.isFile()) {
+          if (/scenario\.ya?ml$/i.test(path.basename(resolved))) {
+            // <...>/<scenario>/scenario.yaml -> <...>/output
+            addCandidate(path.join(path.dirname(path.dirname(resolved)), "output"));
+          }
+        } else if (stat.isDirectory()) {
+          const directScenario = ["scenario.yaml", "scenario.yml"]
+            .some((name) => fs.existsSync(path.join(resolved, name)));
+          if (directScenario) {
+            // <...>/<scenario>/ -> <...>/output
+            addCandidate(path.join(path.dirname(resolved), "output"));
+          }
+
+          let hasNestedScenarios = false;
+          try {
+            for (const entry of fs.readdirSync(resolved, { withFileTypes: true })) {
+              if (!entry.isDirectory()) { continue; }
+              const child = path.join(resolved, entry.name);
+              if (["scenario.yaml", "scenario.yml"].some((name) => fs.existsSync(path.join(child, name)))) {
+                hasNestedScenarios = true;
+                break;
+              }
+            }
+          } catch {
+            // Skip inaccessible directories.
+          }
+          if (hasNestedScenarios) {
+            // <...>/scenarios -> <...>/scenarios/output
+            addCandidate(path.join(resolved, "output"));
+          }
+        }
+      } catch {
+        // Skip missing/inaccessible paths safely.
+      }
+
+      // Backward-compatible fallbacks from previous behavior.
+      addCandidate(path.join(resolved, "..", "output"));
+      addCandidate(path.join(resolved, "output"));
+
+      for (const candidate of candidateDirs) {
+        if (fs.existsSync(candidate)) {
+          dirs.add(candidate);
+        }
+      }
     }
-    return [...new Set(dirs)];
+    return [...dirs];
   }
 
   /** Get the path to the active report CSV file, if it exists. */
@@ -577,53 +671,98 @@ export class ResultsProvider implements vscode.TreeDataProvider<ResultItem> {
     if (this.activeScenario) {
       const isLocal = this.activeScenario.endsWith(" (Local)");
       const dirName = isLocal ? this.activeScenario.replace(" (Local)", "") : this.activeScenario;
-      const suffix = isLocal ? "-local" : "";
       for (const outputDir of outputDirs) {
-        const scenarioJson = path.join(outputDir, dirName, `classifications${suffix}.json`);
-        if (fs.existsSync(scenarioJson)) {
-          if (this.loadFromJson(scenarioJson)) { return; }
+        const jsonNames = isLocal
+          ? ["classifications-local.json", "classifications.json"]
+          : ["classifications.json", "classifications-local.json"];
+        for (const jsonName of jsonNames) {
+          const scenarioJson = path.join(outputDir, dirName, jsonName);
+          if (fs.existsSync(scenarioJson)) {
+            if (this.loadFromJson(scenarioJson)) {
+              this.activeScenario = jsonName.includes("-local")
+                ? `${dirName} (Local)`
+                : dirName;
+              return;
+            }
+          }
         }
-        const scenarioCsv = path.join(outputDir, dirName, `report${suffix}.csv`);
-        if (fs.existsSync(scenarioCsv)) {
-          if (this.loadFromCsv(scenarioCsv)) { return; }
+
+        const csvNames = isLocal
+          ? ["report-local.csv", "report.csv"]
+          : ["report.csv", "report-local.csv"];
+        for (const csvName of csvNames) {
+          const scenarioCsv = path.join(outputDir, dirName, csvName);
+          if (fs.existsSync(scenarioCsv)) {
+            if (this.loadFromCsv(scenarioCsv)) {
+              this.activeScenario = csvName.includes("-local")
+                ? `${dirName} (Local)`
+                : dirName;
+              return;
+            }
+          }
         }
       }
     }
 
     // No active scenario — find the most recent results across all output dirs
     const jsonCandidates: string[] = [];
+    const csvCandidates: string[] = [];
     for (const outputDir of outputDirs) {
       jsonCandidates.push(path.join(outputDir, "classifications.json"));
+      jsonCandidates.push(path.join(outputDir, "classifications-local.json"));
+      csvCandidates.push(path.join(outputDir, "report.csv"));
+      csvCandidates.push(path.join(outputDir, "report-local.csv"));
       if (fs.existsSync(outputDir)) {
         try {
           for (const entry of fs.readdirSync(outputDir, { withFileTypes: true })) {
             if (entry.isDirectory()) {
               jsonCandidates.push(path.join(outputDir, entry.name, "classifications.json"));
+              jsonCandidates.push(path.join(outputDir, entry.name, "classifications-local.json"));
+              csvCandidates.push(path.join(outputDir, entry.name, "report.csv"));
+              csvCandidates.push(path.join(outputDir, entry.name, "report-local.csv"));
             }
           }
         } catch { /* ignore */ }
       }
     }
 
-    // Use the most recently modified classifications.json
-    let jsonPath: string | undefined;
-    let latestMtime = 0;
-    for (const candidate of jsonCandidates) {
-      if (fs.existsSync(candidate)) {
-        const mtime = fs.statSync(candidate).mtimeMs;
-        if (mtime > latestMtime) {
-          latestMtime = mtime;
-          jsonPath = candidate;
-        }
+    const resolveScenarioFromPath = (resultPath: string): string | undefined => {
+      const parent = path.basename(path.dirname(resultPath));
+      if (parent === "output") { return undefined; }
+      const isLocal = path.basename(resultPath).includes("-local");
+      return isLocal ? `${parent} (Local)` : parent;
+    };
+
+    const getNewestCandidates = (candidates: string[]): string[] => {
+      return Array.from(new Set(candidates))
+        .filter((candidate) => fs.existsSync(candidate))
+        .sort((a, b) => fs.statSync(b).mtimeMs - fs.statSync(a).mtimeMs);
+    };
+
+    const sortedJsonCandidates = getNewestCandidates(jsonCandidates);
+    for (let i = 0; i < sortedJsonCandidates.length; i += 1) {
+      const candidate = sortedJsonCandidates[i];
+      const scenario = resolveScenarioFromPath(candidate);
+      this.activeScenario = scenario;
+      if (this.loadFromJson(candidate)) { return; }
+      if (i === 0) {
+        console.warn(`[docs-capacitor] Failed to parse newest JSON results candidate: ${candidate}. Trying older candidates.`);
+      } else {
+        console.warn(`[docs-capacitor] Failed to parse JSON results candidate: ${candidate}`);
       }
     }
 
-    if (jsonPath) {
-      const parent = path.basename(path.dirname(jsonPath));
-      if (parent !== "output") {
-        this.activeScenario = parent;
+    const sortedCsvCandidates = getNewestCandidates(csvCandidates);
+    for (let i = 0; i < sortedCsvCandidates.length; i += 1) {
+      const candidate = sortedCsvCandidates[i];
+      const scenario = resolveScenarioFromPath(candidate);
+      this.activeScenario = scenario;
+      if (this.loadFromCsv(candidate)) { return; }
+      if (i === 0) {
+        console.warn(`[docs-capacitor] Failed to parse newest CSV results candidate: ${candidate}. Trying older candidates.`);
+      } else {
+        console.warn(`[docs-capacitor] Failed to parse CSV results candidate: ${candidate}`);
       }
-      if (this.loadFromJson(jsonPath)) { return; }
     }
 
     this.results = [];
@@ -694,21 +833,87 @@ export class ResultsProvider implements vscode.TreeDataProvider<ResultItem> {
 
   private loadFromCsv(csvPath: string): boolean {
     try {
-      const lines = fs.readFileSync(csvPath, "utf-8").split("\n").filter(Boolean);
-      const header = lines[0].split(",");
-      const urlIdx = header.indexOf("url");
-      const classIdx = header.indexOf("classification");
-      const confIdx = header.indexOf("confidence");
+      const lines = fs.readFileSync(csvPath, "utf-8").split(/\r?\n/).filter(Boolean);
+      const header = this.parseCsvLine(lines[0]).map((h) => h.trim().replace(/^\uFEFF/, ""));
+      const headerIndex = new Map<string, number>();
+      header.forEach((name, idx) => {
+        headerIndex.set(name.toLowerCase(), idx);
+      });
+
+      const getVal = (cols: string[], ...names: string[]): string => {
+        for (const name of names) {
+          const idx = headerIndex.get(name.toLowerCase());
+          if (idx !== undefined) {
+            return cols[idx] ?? "";
+          }
+        }
+        return "";
+      };
+
+      this.meta = undefined;
       this.results = lines.slice(1).map((line) => {
-        const cols = line.split(",");
+        const cols = this.parseCsvLine(line).map((c) => c.trim());
+        const rawConfidence = getVal(cols, "confidence");
+        const numericConfidence = Number(rawConfidence);
+        const confidence: number | string =
+          rawConfidence.length === 0
+            ? 0
+            : Number.isFinite(numericConfidence)
+              ? numericConfidence
+              : rawConfidence;
+        const rawAgrees = getVal(cols, "agrees_with_regex").toLowerCase();
+
         return {
-          url: cols[urlIdx] ?? "",
-          classification: cols[classIdx] ?? "unknown",
-          confidence: Number(cols[confIdx] ?? 0),
+          url: getVal(cols, "url", "page_url"),
+          title: getVal(cols, "title") || undefined,
+          classification: getVal(cols, "classification") || "unknown",
+          confidence,
+          topic: getVal(cols, "release_conflict_topic_title", "topic") || undefined,
+          reason: getVal(cols, "reason") || undefined,
+          suggested_fix: getVal(cols, "suggested_fix") || undefined,
+          evidence: getVal(cols, "evidence") || undefined,
+          regex_evidence: getVal(cols, "regex_evidence") || undefined,
+          regex_signal: getVal(cols, "regex_signal") || undefined,
+          regex_signals: getVal(cols, "regex_rule_ids")
+            .split(" | ")
+            .map((s) => s.trim())
+            .filter(Boolean),
+          release_conflict_section: getVal(cols, "release_conflict_section") || undefined,
+          agrees_with_regex: rawAgrees
+            ? ["true", "1", "yes", "y"].includes(rawAgrees)
+            : undefined,
+          repo: getVal(cols, "repo") || undefined,
         };
       });
       return true;
     } catch { /* ignore */ }
     return false;
+  }
+
+  private parseCsvLine(line: string): string[] {
+    const fields: string[] = [];
+    let current = "";
+    let inQuotes = false;
+
+    for (let i = 0; i < line.length; i += 1) {
+      const ch = line[i];
+      if (ch === "\"") {
+        if (inQuotes && line[i + 1] === "\"") {
+          current += "\"";
+          i += 1;
+          continue;
+        }
+        inQuotes = !inQuotes;
+        continue;
+      }
+      if (ch === "," && !inQuotes) {
+        fields.push(current);
+        current = "";
+        continue;
+      }
+      current += ch;
+    }
+    fields.push(current);
+    return fields;
   }
 }

@@ -33,7 +33,7 @@ export class SettingsPanel {
 
     const panel = vscode.window.createWebviewPanel(
       SettingsPanel.viewType,
-      "Docs Capacitor Settings",
+      "Docs Capacitor Setup & Configuration",
       column,
       { enableScripts: true, retainContextWhenHidden: true },
     );
@@ -56,6 +56,9 @@ export class SettingsPanel {
         pythonPath?: string;
         timeoutMs?: number;
         scenarioPaths?: string[];
+        learnKnowledgeServiceUrl?: string;
+        learnKnowledgeServiceScope?: string;
+        usePublicLearnFallback?: boolean;
       }) => {
         // Delegate to external handler if wired
         if (SettingsPanel.onMessage && msg.command !== "ready") {
@@ -84,8 +87,22 @@ export class SettingsPanel {
             await this.handleTestModelsConnection();
             break;
           case "saveSettings":
-            if (msg.pythonPath !== undefined && msg.timeoutMs !== undefined && msg.scenarioPaths !== undefined) {
-              await this.handleSaveSettings(msg.pythonPath, msg.timeoutMs, msg.scenarioPaths);
+            if (
+              msg.pythonPath !== undefined &&
+              msg.timeoutMs !== undefined &&
+              msg.scenarioPaths !== undefined &&
+              msg.learnKnowledgeServiceUrl !== undefined &&
+              msg.learnKnowledgeServiceScope !== undefined &&
+              msg.usePublicLearnFallback !== undefined
+            ) {
+              await this.handleSaveSettings(
+                msg.pythonPath,
+                msg.timeoutMs,
+                msg.scenarioPaths,
+                msg.learnKnowledgeServiceUrl,
+                msg.learnKnowledgeServiceScope,
+                msg.usePublicLearnFallback,
+              );
             }
             break;
         }
@@ -107,9 +124,12 @@ export class SettingsPanel {
 
   private async handleReady(): Promise<void> {
     const config = vscode.workspace.getConfiguration("docs-capacitor");
-    const pythonPath = config.get<string>("pythonPath", "python3");
+    const pythonPath = config.get<string>("pythonPath", "python");
     const timeoutMs = config.get<number>("timeoutMs", 300_000);
     const scenarioPaths = config.get<string[]>("scenarioPaths", []);
+    const learnKnowledgeServiceUrl = config.get<string>("learnKnowledgeServiceUrl", "");
+    const learnKnowledgeServiceScope = config.get<string>("learnKnowledgeServiceScope", "");
+    const usePublicLearnFallback = config.get<boolean>("usePublicLearnFallback", true);
     const modelsUser = process.env["GITHUB_MODELS_USER"] ?? "";
 
     this.panel.webview.postMessage({
@@ -119,6 +139,9 @@ export class SettingsPanel {
       pythonPath,
       timeoutMs,
       scenarioPaths,
+      learnKnowledgeServiceUrl,
+      learnKnowledgeServiceScope,
+      usePublicLearnFallback,
     });
   }
 
@@ -149,11 +172,21 @@ export class SettingsPanel {
     });
   }
 
-  private async handleSaveSettings(pythonPath: string, timeoutMs: number, scenarioPaths: string[]): Promise<void> {
+  private async handleSaveSettings(
+    pythonPath: string,
+    timeoutMs: number,
+    scenarioPaths: string[],
+    learnKnowledgeServiceUrl: string,
+    learnKnowledgeServiceScope: string,
+    usePublicLearnFallback: boolean,
+  ): Promise<void> {
     const config = vscode.workspace.getConfiguration("docs-capacitor");
     await config.update("pythonPath", pythonPath, vscode.ConfigurationTarget.Global);
     await config.update("timeoutMs", timeoutMs, vscode.ConfigurationTarget.Global);
     await config.update("scenarioPaths", scenarioPaths, vscode.ConfigurationTarget.Global);
+    await config.update("learnKnowledgeServiceUrl", learnKnowledgeServiceUrl, vscode.ConfigurationTarget.Global);
+    await config.update("learnKnowledgeServiceScope", learnKnowledgeServiceScope, vscode.ConfigurationTarget.Global);
+    await config.update("usePublicLearnFallback", usePublicLearnFallback, vscode.ConfigurationTarget.Global);
     vscode.window.showInformationMessage("Settings saved.");
   }
 
@@ -166,8 +199,21 @@ export class SettingsPanel {
     pythonPath: string,
     timeoutMs: number,
     scenarioPaths: string[],
+    learnKnowledgeServiceUrl: string,
+    learnKnowledgeServiceScope: string,
+    usePublicLearnFallback: boolean,
   ): void {
-    SettingsPanel.instance?.panel.webview.postMessage({ command: "setState", status, modelsUser, pythonPath, timeoutMs, scenarioPaths });
+    SettingsPanel.instance?.panel.webview.postMessage({
+      command: "setState",
+      status,
+      modelsUser,
+      pythonPath,
+      timeoutMs,
+      scenarioPaths,
+      learnKnowledgeServiceUrl,
+      learnKnowledgeServiceScope,
+      usePublicLearnFallback,
+    });
   }
 
   /** Send updated check results after a re-check. */
@@ -180,6 +226,11 @@ export class SettingsPanel {
     SettingsPanel.instance?.panel.webview.postMessage({ command: "testResult", success, message });
   }
 
+  /** Send the result of a Learn-connection test. */
+  public static postLearnTestResult(success: boolean, message: string): void {
+    SettingsPanel.instance?.panel.webview.postMessage({ command: "learnTestResult", success, message });
+  }
+
   // ── HTML ──────────────────────────────────────────────────────────────
 
   private getHtml(): string {
@@ -187,9 +238,12 @@ export class SettingsPanel {
     const config = vscode.workspace.getConfiguration("docs-capacitor");
     const initData = JSON.stringify({
       modelsUser: process.env["GITHUB_MODELS_USER"] ?? "",
-      pythonPath: config.get<string>("pythonPath", "python3"),
+      pythonPath: config.get<string>("pythonPath", "python"),
       timeoutMs: config.get<number>("timeoutMs", 1800000),
       scenarioPaths: config.get<string[]>("scenarioPaths", []),
+      learnKnowledgeServiceUrl: config.get<string>("learnKnowledgeServiceUrl", ""),
+      learnKnowledgeServiceScope: config.get<string>("learnKnowledgeServiceScope", ""),
+      usePublicLearnFallback: config.get<boolean>("usePublicLearnFallback", true),
     });
 
     return /* html */ `<!DOCTYPE html>
@@ -199,13 +253,16 @@ export class SettingsPanel {
   <meta http-equiv="Content-Security-Policy"
         content="default-src 'none'; style-src 'nonce-${nonce}'; script-src 'nonce-${nonce}';" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Docs Capacitor Settings</title>
+  <title>Docs Capacitor Setup & Configuration</title>
   <style nonce="${nonce}">
     :root { font-family: var(--vscode-font-family); color: var(--vscode-editor-foreground); }
     * { box-sizing: border-box; }
     body { padding: 0 20px 20px; margin: 0; background: var(--vscode-editor-background); }
     h1 { font-size: 1.4em; margin: 16px 0 8px; }
     h2 { font-size: 1.1em; margin: 16px 0 8px; border-bottom: 1px solid var(--vscode-widget-border, #444); padding-bottom: 4px; }
+    .top-nav { display: flex; gap: 8px; margin: 8px 0 12px; }
+    .advanced-wrap { margin: 10px 0; }
+    .advanced-wrap summary { cursor: pointer; font-weight: 600; }
 
     /* ── status cards row ─────────────────────────────────── */
     .status-row {
@@ -279,27 +336,49 @@ export class SettingsPanel {
 </head>
 <body>
 
-<h1>⚙️ Docs Capacitor Settings</h1>
+<h1>⚙️ Docs Capacitor Setup & Configuration</h1>
+<div class="top-nav">
+  <button id="btnJumpGitHub" class="secondary">GitHub</button>
+  <button id="btnJumpEnvironment" class="secondary">Environment</button>
+  <button id="btnJumpAdvanced" class="secondary">Advanced</button>
+</div>
+<p class="detail">Guided setup: only required items are shown first. Expand Advanced only if needed.</p>
 
 <!-- ── Status Summary ────────────────────────────────────── -->
 <div class="status-row" id="statusRow">
   <div class="status-card"><span class="name">Python</span> <span class="badge unknown" id="badge-Python">…</span></div>
+  <div class="status-card"><span class="name">Capacitor</span> <span class="badge unknown" id="badge-Capacitor package">…</span></div>
   <div class="status-card"><span class="name">GitHub CLI</span> <span class="badge unknown" id="badge-GitHub CLI">…</span></div>
   <div class="status-card"><span class="name">GitHub Auth</span> <span class="badge unknown" id="badge-GitHub auth">…</span></div>
   <div class="status-card"><span class="name">Models Auth</span> <span class="badge unknown" id="badge-Models auth">…</span></div>
+  <div class="status-card"><span class="name">Learn Access</span> <span class="badge unknown" id="badge-Learn access">…</span></div>
+  <div class="status-card"><span class="name">Learn Auth</span> <span class="badge unknown" id="badge-Learn service auth">…</span></div>
+</div>
+
+<div class="card">
+  <h2>Setup Actions</h2>
+  <p class="detail">Run checks across Python, Capacitor package, GitHub, Models, and Learn integration.</p>
+  <p class="detail" id="setupActionStatus">Ready to run checks.</p>
+  <button id="btnRunFullSetupCheck" class="secondary">Run Full Setup Check</button>
+  <button id="btnCheckStatus" class="secondary">Check Status</button>
 </div>
 
 <!-- ── GitHub (Git Operations) ───────────────────────────── -->
-<div class="card">
+<div class="card" id="section-github">
   <h2>GitHub (Git Operations)</h2>
+  <p class="detail">Required: GitHub CLI (<code>gh</code>) must be installed and authenticated.</p>
   <p id="ghStatusText" class="detail">Checking…</p>
-  <button id="btnCheckStatus" class="secondary">Check Status</button>
+  <button id="btnInstallGhCli" class="secondary">Install GitHub CLI</button>
   <button id="btnSwitchAccount">Switch Account</button>
 </div>
 
+<details class="advanced-wrap" id="section-advanced">
+  <summary>Advanced authentication & Learn settings (optional)</summary>
+
 <!-- ── GitHub Models (LLM) ───────────────────────────────── -->
-<div class="card">
+<div class="card" id="section-models">
   <h2>GitHub Models (LLM)</h2>
+  <p class="detail">Optional: configure this for additional model access and higher-capability LLM checks.</p>
   <p id="modelsStatusText" class="detail">Checking…</p>
   <label for="modelsUserInput">GITHUB_MODELS_USER</label>
   <input type="text" id="modelsUserInput" placeholder="e.g. my-github-user" />
@@ -311,12 +390,35 @@ export class SettingsPanel {
   <div class="test-banner" id="testBanner"></div>
 </div>
 
+<!-- ── Learn Knowledge Service ─────────────────────────────── -->
+<div class="card" id="section-learn">
+  <h2>Learn Knowledge Service</h2>
+  <p id="learnStatusText" class="detail">Usually auto-configured from your scenario. Most users should not need to enter URLs manually.</p>
+  <label for="learnKnowledgeServiceUrlInput">Service URL</label>
+  <input type="text" id="learnKnowledgeServiceUrlInput" placeholder="https://your-learn-service.contoso.com" />
+  <label for="learnKnowledgeServiceScopeInput">Azure scope</label>
+  <input type="text" id="learnKnowledgeServiceScopeInput" placeholder="api://your-app-id/.default" />
+  <label for="usePublicLearnFallbackInput">Fallback to public Learn search if internal Learn auth fails</label>
+  <input type="checkbox" id="usePublicLearnFallbackInput" checked />
+  <div style="margin-top:8px">
+    <button id="btnTestLearnConnection" class="secondary">Test Learn Connection</button>
+  </div>
+  <div class="test-banner" id="learnTestBanner"></div>
+  <p class="detail">Use local identity (DefaultAzureCredential) or set <code>LEARN_KNOWLEDGE_SERVICE_TOKEN</code>.</p>
+</div>
+
+</details>
+
 <!-- ── Environment ───────────────────────────────────────── -->
-<div class="card">
+<div class="card" id="section-environment">
   <h2>Environment</h2>
 
   <label for="pythonPathInput">Python Path</label>
-  <input type="text" id="pythonPathInput" placeholder="python3" />
+  <p class="detail">Required: Python 3.9+ with the <code>docs-capacitor[llm]</code> package installed.</p>
+  <input type="text" id="pythonPathInput" placeholder="python" />
+
+  <details class="advanced-wrap">
+    <summary>Advanced environment settings (optional)</summary>
 
   <label for="timeoutInput">Timeout (ms)</label>
   <input type="number" id="timeoutInput" placeholder="300000" min="1000" step="1000" />
@@ -324,9 +426,10 @@ export class SettingsPanel {
   <label>Scenario Paths</label>
   <ul class="path-list" id="scenarioPathsList"></ul>
   <div class="add-path-row">
-    <input type="text" id="newPathInput" placeholder="/path/to/scenarios" />
+    <input type="text" id="newPathInput" placeholder="path/to/scenarios (or C:\\path\\to\\scenarios)" />
     <button id="btnAddPath" class="secondary">Add</button>
   </div>
+  </details>
 
   <div style="margin-top:12px">
     <button id="btnSaveSettings">Save Settings</button>
@@ -343,12 +446,18 @@ export class SettingsPanel {
   // ── elements ───────────────────────────────────────────
   const ghStatusText       = document.getElementById("ghStatusText");
   const modelsStatusText   = document.getElementById("modelsStatusText");
+  const learnStatusText    = document.getElementById("learnStatusText");
+  const setupActionStatus  = document.getElementById("setupActionStatus");
   const modelsUserInput    = document.getElementById("modelsUserInput");
+  const learnKnowledgeServiceUrlInput = document.getElementById("learnKnowledgeServiceUrlInput");
+  const learnKnowledgeServiceScopeInput = document.getElementById("learnKnowledgeServiceScopeInput");
+  const usePublicLearnFallbackInput = document.getElementById("usePublicLearnFallbackInput");
   const pythonPathInput    = document.getElementById("pythonPathInput");
   const timeoutInput       = document.getElementById("timeoutInput");
   const scenarioPathsList  = document.getElementById("scenarioPathsList");
   const newPathInput       = document.getElementById("newPathInput");
   const testBanner         = document.getElementById("testBanner");
+  const learnTestBanner    = document.getElementById("learnTestBanner");
 
   // ── helpers ────────────────────────────────────────────
   function updateBadge(id, ok) {
@@ -362,9 +471,12 @@ export class SettingsPanel {
     // Map check names to badge element IDs
     const mapping = {
       "Python":           "badge-Python",
+      "Capacitor package":"badge-Capacitor package",
       "GitHub CLI":       "badge-GitHub CLI",
       "GitHub auth":      "badge-GitHub auth",
       "Models auth":      "badge-Models auth",
+      "Learn access":     "badge-Learn access",
+      "Learn service auth":"badge-Learn service auth",
     };
 
     // Reset all to unknown first if checks are empty
@@ -383,15 +495,28 @@ export class SettingsPanel {
     }
 
     // Update detail text for GitHub section
+    const ghCli = checks.find(function (c) { return c.name === "GitHub CLI"; });
     const ghAuth = checks.find(function (c) { return c.name === "GitHub auth"; });
-    if (ghAuth) {
-      ghStatusText.textContent = ghAuth.message;
+    const ghParts = [];
+    if (ghCli) ghParts.push(ghCli.message);
+    if (ghAuth) ghParts.push(ghAuth.message);
+    if (ghParts.length > 0) {
+      ghStatusText.textContent = ghParts.join(" | ");
     }
 
     // Update detail text for Models section
     const modelsAuth = checks.find(function (c) { return c.name === "Models auth"; });
     if (modelsAuth) {
       modelsStatusText.textContent = modelsAuth.message;
+    }
+
+    const learnAccess = checks.find(function (c) { return c.name === "Learn access"; });
+    const learnAuth = checks.find(function (c) { return c.name === "Learn service auth"; });
+    const learnParts = [];
+    if (learnAccess) learnParts.push(learnAccess.message);
+    if (learnAuth) learnParts.push(learnAuth.message);
+    if (learnParts.length > 0) {
+      learnStatusText.textContent = learnParts.join(" | ");
     }
   }
 
@@ -418,15 +543,20 @@ export class SettingsPanel {
     switch (msg.command) {
       case "setState":
         applyStatusChecks(msg.status);
+        setupActionStatus.textContent = "Status loaded.";
         modelsUserInput.value = msg.modelsUser || "";
-        pythonPathInput.value = msg.pythonPath || "python3";
+        pythonPathInput.value = msg.pythonPath || "python";
         timeoutInput.value    = String(msg.timeoutMs || 300000);
+        learnKnowledgeServiceUrlInput.value = msg.learnKnowledgeServiceUrl || "";
+        learnKnowledgeServiceScopeInput.value = msg.learnKnowledgeServiceScope || "";
+        usePublicLearnFallbackInput.checked = msg.usePublicLearnFallback !== false;
         scenarioPaths = msg.scenarioPaths ? msg.scenarioPaths.slice() : [];
         renderScenarioPaths();
         break;
 
       case "updateStatus":
         applyStatusChecks(msg.status);
+        setupActionStatus.textContent = "Status updated.";
         break;
 
       case "testResult":
@@ -434,12 +564,41 @@ export class SettingsPanel {
         testBanner.className = "test-banner " + (msg.success ? "success" : "error");
         testBanner.textContent = msg.message || (msg.success ? "Connection OK" : "Connection failed");
         break;
+      case "learnTestResult":
+        learnTestBanner.style.display = "block";
+        learnTestBanner.className = "test-banner " + (msg.success ? "success" : "error");
+        learnTestBanner.textContent = msg.message || (msg.success ? "Learn connection OK" : "Learn connection failed");
+        break;
     }
   });
 
   // ── buttons → messages to extension ────────────────────
   document.getElementById("btnCheckStatus").addEventListener("click", function () {
+    setupActionStatus.textContent = "Checking setup status…";
     vscode.postMessage({ command: "checkStatus" });
+  });
+
+  document.getElementById("btnInstallGhCli").addEventListener("click", function () {
+    vscode.postMessage({ command: "openGhCliInstall" });
+  });
+
+  document.getElementById("btnJumpGitHub").addEventListener("click", function () {
+    document.getElementById("section-github")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  });
+
+  document.getElementById("btnJumpEnvironment").addEventListener("click", function () {
+    document.getElementById("section-environment")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  });
+
+  document.getElementById("btnJumpAdvanced").addEventListener("click", function () {
+    var adv = document.getElementById("section-advanced");
+    if (adv && typeof adv.open === "boolean") adv.open = true;
+    adv?.scrollIntoView({ behavior: "smooth", block: "start" });
+  });
+
+  document.getElementById("btnRunFullSetupCheck").addEventListener("click", function () {
+    setupActionStatus.textContent = "Running full setup check…";
+    vscode.postMessage({ command: "runFullSetupCheck" });
   });
 
   document.getElementById("btnSwitchAccount").addEventListener("click", function () {
@@ -459,6 +618,11 @@ export class SettingsPanel {
     vscode.postMessage({ command: "testModelsConnection" });
   });
 
+  document.getElementById("btnTestLearnConnection").addEventListener("click", function () {
+    learnTestBanner.style.display = "none";
+    vscode.postMessage({ command: "testLearnConnection" });
+  });
+
   document.getElementById("btnAddPath").addEventListener("click", function () {
     var val = newPathInput.value.trim();
     if (val) {
@@ -474,6 +638,9 @@ export class SettingsPanel {
       pythonPath: pythonPathInput.value.trim(),
       timeoutMs: parseInt(timeoutInput.value, 10) || 300000,
       scenarioPaths: scenarioPaths.slice(),
+      learnKnowledgeServiceUrl: learnKnowledgeServiceUrlInput.value.trim(),
+      learnKnowledgeServiceScope: learnKnowledgeServiceScopeInput.value.trim(),
+      usePublicLearnFallback: !!usePublicLearnFallbackInput.checked,
     });
   });
 
@@ -481,8 +648,11 @@ export class SettingsPanel {
   (function initFromEmbedded() {
     var d = JSON.parse(decodeURIComponent("${encodeURIComponent(initData)}"));
     modelsUserInput.value = d.modelsUser || "";
-    pythonPathInput.value = d.pythonPath || "python3";
+    pythonPathInput.value = d.pythonPath || "python";
     timeoutInput.value = String(d.timeoutMs || 1800000);
+    learnKnowledgeServiceUrlInput.value = d.learnKnowledgeServiceUrl || "";
+    learnKnowledgeServiceScopeInput.value = d.learnKnowledgeServiceScope || "";
+    usePublicLearnFallbackInput.checked = d.usePublicLearnFallback !== false;
     scenarioPaths = d.scenarioPaths ? d.scenarioPaths.slice() : [];
     renderScenarioPaths();
   })();

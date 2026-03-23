@@ -27,3 +27,22 @@ jobs:
 
       - name: Run tests
         run: python3 -m pytest tests/ -v
+
+  extension:
+    name: Extension Lint & Package
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install extension dependencies
+        run: npm --prefix extension ci
+
+      - name: Typecheck extension
+        run: npm --prefix extension run lint
+
+      - name: Package VSIX (validation)
+        run: npm --prefix extension run package

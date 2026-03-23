@@ -2,7 +2,7 @@
   "name": "docs-capacitor",
   "displayName": "Docs Capacitor — Documentation Freshness",
   "description": "Detect outdated references in Microsoft Learn documentation",
-  "version": "0.1.0",
+  "version": "0.1.12",
   "publisher": "microsoft",
   "license": "MIT",
   "engines": {
@@ -13,8 +13,16 @@
     "Linters"
   ],
   "activationEvents": [
+    "onStartupFinished",
     "onView:docsCapacitorScenarios",
-    "onView:docsCapacitorResults"
+    "onView:docsCapacitorResults",
+    "onCommand:docs-capacitor.setupEnvironment",
+    "onCommand:docs-capacitor.check",
+    "onCommand:docs-capacitor.deepScan",
+    "onCommand:docs-capacitor.validate",
+    "onCommand:docs-capacitor.openScenario",
+    "onCommand:docs-capacitor.createScenario",
+    "onCommand:docs-capacitor.scenario.refresh"
   ],
   "main": "./out/extension.js",
   "contributes": {
@@ -49,7 +57,7 @@
       },
       {
         "command": "docs-capacitor.setupEnvironment",
-        "title": "Settings & Authentication",
+        "title": "Open Setup & Configuration",
         "category": "Docs Capacitor",
         "icon": "$(gear)"
       },
@@ -307,6 +315,11 @@
           "group": "navigation@2"
         },
         {
+          "command": "docs-capacitor.setupEnvironment",
+          "when": "view == docsCapacitorScenarios",
+          "group": "navigation@3"
+        },
+        {
           "command": "docs-capacitor.check",
           "when": "view == docsCapacitorResults",
           "group": "navigation@1"
@@ -345,6 +358,11 @@
           "command": "docs-capacitor.switchResults",
           "when": "view == docsCapacitorResults",
           "group": "navigation@8"
+        },
+        {
+          "command": "docs-capacitor.setupEnvironment",
+          "when": "view == docsCapacitorResults",
+          "group": "navigation@9"
         }
       ]
     },
@@ -353,7 +371,7 @@
       "properties": {
         "docs-capacitor.pythonPath": {
           "type": "string",
-          "default": "python3",
+          "default": "python",
           "description": "Path to the Python interpreter"
         },
         "docs-capacitor.defaultScenario": {
@@ -368,7 +386,9 @@
         },
         "docs-capacitor.scenarioPaths": {
           "type": "array",
-          "items": { "type": "string" },
+          "items": {
+            "type": "string"
+          },
           "default": [],
           "description": "Additional directories to search for scenario.yaml files (absolute paths or relative to workspace root)"
         },
@@ -376,6 +396,21 @@
           "type": "string",
           "default": "",
           "description": "Path to a file containing default allowed repository names (one per line). Used to pre-populate new scenarios."
+        },
+        "docs-capacitor.learnKnowledgeServiceUrl": {
+          "type": "string",
+          "default": "",
+          "description": "Internal Learn Knowledge Service base URL."
+        },
+        "docs-capacitor.learnKnowledgeServiceScope": {
+          "type": "string",
+          "default": "",
+          "description": "Scope used by DefaultAzureCredential for internal Learn service (for example: api://<app-id>/.default)."
+        },
+        "docs-capacitor.usePublicLearnFallback": {
+          "type": "boolean",
+          "default": true,
+          "description": "If enabled, Learn collection can fall back to public Learn search when internal Learn auth checks fail."
         }
       }
     },
@@ -403,18 +438,19 @@
     "viewsWelcome": [
       {
         "view": "docsCapacitorScenarios",
-        "contents": "No scenario files found in this workspace.\n\nA scenario defines which docs to check and what rules to apply.\n\n[Create New Scenario](command:docs-capacitor.createScenario)\n\n[Open Existing Scenario](command:docs-capacitor.openScenario)\n\n[Setup Environment](command:docs-capacitor.setupEnvironment)\n\nTip: Open the docs-capacitor folder as your workspace, or place scenario.yaml files under a scenarios/ directory."
+        "contents": "No scenario files found in this workspace.\n\nA scenario defines which docs to check and what rules to apply.\n\n[Create New Scenario](command:docs-capacitor.createScenario)\n\n[Open Existing Scenario](command:docs-capacitor.openScenario)\n\nTip: Open the docs-capacitor folder as your workspace, or place scenario.yaml files under a scenarios/ directory."
       },
       {
         "view": "docsCapacitorResults",
-        "contents": "No freshness results yet.\n\nRun a check to detect outdated documentation.\n\n[Run Freshness Check](command:docs-capacitor.check)\n\nOr right-click a scenario in the panel above → Run Check."
+        "contents": "No freshness results yet.\n\nRun a check to detect outdated documentation.\n\nOr right-click a scenario in the panel above → Run Check."
       }
     ]
   },
   "scripts": {
+    "prepare:runtime": "node ./scripts/prepare-python-runtime.js",
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
-    "package": "npm run compile && npx @vscode/vsce package --no-dependencies",
+    "package": "npm run prepare:runtime && npm run compile && npx @vscode/vsce package --allow-missing-repository",
     "lint": "tsc --noEmit",
     "test": "npx @vscode/test-cli --run"
   },
