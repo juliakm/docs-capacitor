@@ -6,6 +6,9 @@ on:
     tags:
       - "v*"
 
+permissions:
+  contents: write
+
 jobs:
   build-vsix:
     runs-on: ubuntu-latest
@@ -27,3 +30,9 @@ jobs:
         with:
           name: docs-capacitor-vsix
           path: extension/*.vsix
+
+      - name: Upload VSIX to GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: extension/*.vsix
