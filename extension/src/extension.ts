@@ -15,6 +15,7 @@ const OUTPUT_CHANNEL_NAME = "Docs Capacitor";
 
 let outputChannel: vscode.OutputChannel;
 let statusBarItem: vscode.StatusBarItem;
+let activePipelineRun: "check" | "deepScan" | null = null;
 
 function readBundledRuntimeVersion(extensionPath: string): string | undefined {
   try {
@@ -612,32 +613,50 @@ export function activate(context: vscode.ExtensionContext): void {
       if (!scenarioPath) {
         return;
       }
-      if (!(await ensureLearnPreflightReady(scenarioPath))) {
+      if (activePipelineRun) {
+        vscode.window.showWarningMessage(
+          `A Docs Capacitor run (${activePipelineRun}) is already in progress. Please wait or cancel it first.`,
+        );
         return;
       }
-      // Animate status bar while running
-      statusBarItem.text = "$(sync~spin) Capacitor: Running…";
-      statusBarItem.tooltip = "Freshness check in progress — click to cancel";
-      statusBarItem.backgroundColor = new vscode.ThemeColor("statusBarItem.warningBackground");
+      activePipelineRun = "check";
+      try {
+        statusBarItem.text = "$(sync~spin) Capacitor: Starting…";
+        statusBarItem.tooltip = "Preparing freshness check";
+        statusBarItem.backgroundColor = new vscode.ThemeColor("statusBarItem.warningBackground");
+        if (!(await ensureLearnPreflightReady(scenarioPath))) {
+          statusBarItem.backgroundColor = undefined;
+          statusBarItem.text = "$(beaker) Capacitor";
+          statusBarItem.tooltip = "Run Freshness Check";
+          return;
+        }
+        // Animate status bar while running
+        statusBarItem.text = "$(sync~spin) Capacitor: Running…";
+        statusBarItem.tooltip = "Freshness check in progress — click to cancel";
 
-      const scenarioName = path.basename(path.dirname(scenarioPath));
-      const scenarioParent = path.dirname(path.dirname(scenarioPath));
-      const outputDir = path.join(scenarioParent, "output", scenarioName);
-      const runner = await createRunner(context);
-      const result = await runner.runCheck(scenarioPath, outputDir, { timeoutMs: getTimeoutMs() });
+        const scenarioName = path.basename(path.dirname(scenarioPath));
+        const scenarioParent = path.dirname(path.dirname(scenarioPath));
+        const outputDir = path.join(scenarioParent, "output", scenarioName);
+        const runner = await createRunner(context);
+        const result = await runner.runCheck(scenarioPath, outputDir, { timeoutMs: getTimeoutMs() });
 
-      // Restore status bar
-      statusBarItem.backgroundColor = undefined;
-      if (result.success) {
-        const now = new Date().toLocaleTimeString();
-        statusBarItem.text = `$(beaker) Capacitor ✓ ${now}`;
-        statusBarItem.tooltip = `Last check: ${scenarioName} at ${now}`;
-        vscode.window.showInformationMessage(`✅ Freshness check complete for ${scenarioName} — see Results panel.`);
-        resultsProvider.loadScenario(scenarioName);
-      } else {
-        statusBarItem.text = "$(beaker) Capacitor ✗ Failed";
-        statusBarItem.tooltip = "Last check failed — click to retry";
-        vscode.window.showErrorMessage(`Freshness check failed (exit ${result.exitCode}). See Output panel for details.`);
+        // Restore status bar
+        statusBarItem.backgroundColor = undefined;
+        if (result.success) {
+          const now = new Date().toLocaleTimeString();
+          statusBarItem.text = `$(beaker) Capacitor ✓ ${now}`;
+          statusBarItem.tooltip = `Last check: ${scenarioName} at ${now}`;
+          vscode.window.showInformationMessage(`✅ Freshness check complete for ${scenarioName} — see Results panel.`);
+          resultsProvider.loadScenario(scenarioName);
+        } else {
+          statusBarItem.text = "$(beaker) Capacitor ✗ Failed";
+          statusBarItem.tooltip = "Last check failed — click to retry";
+          vscode.window.showErrorMessage(`Freshness check failed (exit ${result.exitCode}). See Output panel for details.`);
+        }
+      } finally {
+        if (activePipelineRun === "check") {
+          activePipelineRun = null;
+        }
       }
     }),
   );
@@ -650,44 +669,65 @@ export function activate(context: vscode.ExtensionContext): void {
       if (!scenarioPath) {
         return;
       }
-      if (!(await ensureLearnPreflightReady(scenarioPath))) {
+      if (activePipelineRun) {
+        vscode.window.showWarningMessage(
+          `A Docs Capacitor run (${activePipelineRun}) is already in progress. Please wait or cancel it first.`,
+        );
         return;
       }
-      let localPath = typeof localPathArg === "string" ? localPathArg : undefined;
-      if (!localPath) {
-        const folderUri = await vscode.window.showOpenDialog({
-          canSelectFolders: true,
-          canSelectFiles: false,
-          canSelectMany: false,
-          openLabel: "Select repo folder to scan",
-        });
-        if (!folderUri || folderUri.length === 0) {
+      activePipelineRun = "deepScan";
+      try {
+        statusBarItem.text = "$(sync~spin) Capacitor: Starting…";
+        statusBarItem.tooltip = "Preparing local scan";
+        statusBarItem.backgroundColor = new vscode.ThemeColor("statusBarItem.warningBackground");
+        if (!(await ensureLearnPreflightReady(scenarioPath))) {
+          statusBarItem.backgroundColor = undefined;
+          statusBarItem.text = "$(beaker) Capacitor";
+          statusBarItem.tooltip = "Run Freshness Check";
           return;
         }
-        localPath = folderUri[0].fsPath;
-      }
+        let localPath = typeof localPathArg === "string" ? localPathArg : undefined;
+        if (!localPath) {
+          const folderUri = await vscode.window.showOpenDialog({
+            canSelectFolders: true,
+            canSelectFiles: false,
+            canSelectMany: false,
+            openLabel: "Select repo folder to scan",
+          });
+          if (!folderUri || folderUri.length === 0) {
+            statusBarItem.backgroundColor = undefined;
+            statusBarItem.text = "$(beaker) Capacitor";
+            statusBarItem.tooltip = "Run Freshness Check";
+            return;
+          }
+          localPath = folderUri[0].fsPath;
+        }
 
-      statusBarItem.text = "$(sync~spin) Capacitor: Local Scan…";
-      statusBarItem.tooltip = "Local scan in progress — this may take a while";
-      statusBarItem.backgroundColor = new vscode.ThemeColor("statusBarItem.warningBackground");
+        statusBarItem.text = "$(sync~spin) Capacitor: Local Scan…";
+        statusBarItem.tooltip = "Local scan in progress — this may take a while";
 
-      const scenarioName = path.basename(path.dirname(scenarioPath));
-      const scenarioParent = path.dirname(path.dirname(scenarioPath));
-      const outputDir = path.join(scenarioParent, "output", scenarioName);
-      const runner = await createRunner(context);
-      const result = await runner.runDeepScan(scenarioPath, outputDir, localPath, { timeoutMs: getTimeoutMs() });
+        const scenarioName = path.basename(path.dirname(scenarioPath));
+        const scenarioParent = path.dirname(path.dirname(scenarioPath));
+        const outputDir = path.join(scenarioParent, "output", scenarioName);
+        const runner = await createRunner(context);
+        const result = await runner.runDeepScan(scenarioPath, outputDir, localPath, { timeoutMs: getTimeoutMs() });
 
-      statusBarItem.backgroundColor = undefined;
-      if (result.success) {
-        const now = new Date().toLocaleTimeString();
-        statusBarItem.text = `$(beaker) Capacitor ✓ ${now}`;
-        statusBarItem.tooltip = `Local scan: ${scenarioName} at ${now}`;
-        vscode.window.showInformationMessage(`✅ Local scan complete for ${scenarioName} — see Results panel.`);
-        resultsProvider.loadScenario(`${scenarioName} (Local)`);
-      } else {
-        statusBarItem.text = "$(beaker) Capacitor ✗ Failed";
-        statusBarItem.tooltip = "Deep scan failed — click to retry";
-        vscode.window.showErrorMessage(`Deep scan failed (exit ${result.exitCode}). See Output panel for details.`);
+        statusBarItem.backgroundColor = undefined;
+        if (result.success) {
+          const now = new Date().toLocaleTimeString();
+          statusBarItem.text = `$(beaker) Capacitor ✓ ${now}`;
+          statusBarItem.tooltip = `Local scan: ${scenarioName} at ${now}`;
+          vscode.window.showInformationMessage(`✅ Local scan complete for ${scenarioName} — see Results panel.`);
+          resultsProvider.loadScenario(`${scenarioName} (Local)`);
+        } else {
+          statusBarItem.text = "$(beaker) Capacitor ✗ Failed";
+          statusBarItem.tooltip = "Deep scan failed — click to retry";
+          vscode.window.showErrorMessage(`Deep scan failed (exit ${result.exitCode}). See Output panel for details.`);
+        }
+      } finally {
+        if (activePipelineRun === "deepScan") {
+          activePipelineRun = null;
+        }
       }
     }),
   );

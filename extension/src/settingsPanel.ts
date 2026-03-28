@@ -369,7 +369,7 @@ export class SettingsPanel {
   <p class="detail">Required: GitHub CLI (<code>gh</code>) must be installed and authenticated.</p>
   <p id="ghStatusText" class="detail">Checking…</p>
   <button id="btnInstallGhCli" class="secondary">Install GitHub CLI</button>
-  <button id="btnSwitchAccount">Switch Account</button>
+  <button id="btnSwitchAccount">GitHub Login</button>
 </div>
 
 <details class="advanced-wrap" id="section-advanced">

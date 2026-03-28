@@ -13,13 +13,11 @@ search:
       - OfficeDev
       - mspnp
     queries:
-      - '"Manage Extensions" copilot "Visual Studio"'
-      - marketplace.visualstudio.com copilot "Visual Studio"
-      - '"Tools" "Extensions" copilot "Visual Studio"'
-      - '"install copilot" "Visual Studio"'
+      - '"GitHub Copilot" "Visual Studio" "Manage Extensions"'
+      - '"GitHub Copilot" "Visual Studio" marketplace.visualstudio.com'
+      - '"GitHub Copilot" "Visual Studio" "Tools" "Extensions"'
       - '"GitHub Copilot" extension "Visual Studio"'
       - '"GitHub Copilot" "Visual Studio" install'
-      - '"GitHub Copilot" "agent mode" "Visual Studio"'
     excluded_repos:
       - MicrosoftDocs/visualstudio-docs
       - MicrosoftDocs/visualstudio-docs-pr
@@ -33,6 +31,9 @@ search:
       - dotnet/aspire
       - MicrosoftDocs/Agent-Skills
     tracker: tracker.json
+    use_cache: true
+    slow_mode: true
+    max_fetch_files: 180
   learn:
     api_url: https://learn.microsoft.com/api/search
     queries:

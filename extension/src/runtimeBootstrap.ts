@@ -46,6 +46,39 @@ function runCapture(
   });
 }
 
+function sourceStamp(rootDir: string): string {
+  let files = 0;
+  let newestMs = 0;
+  const stack = [rootDir];
+  while (stack.length > 0) {
+    const dir = stack.pop() as string;
+    let entries: fs.Dirent[] = [];
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+    for (const entry of entries) {
+      if (entry.name === "__pycache__" || entry.name === ".pytest_cache") { continue; }
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        stack.push(full);
+        continue;
+      }
+      files += 1;
+      try {
+        const ms = fs.statSync(full).mtimeMs;
+        if (ms > newestMs) {
+          newestMs = ms;
+        }
+      } catch {
+        // Skip unreadable files.
+      }
+    }
+  }
+  return `${files}:${Math.floor(newestMs)}`;
+}
+
 async function resolvePythonCommand(
   configuredPython: string,
   cwd: string,
@@ -96,9 +129,10 @@ export async function ensureBundledRuntime(
   }
 
   const expectedVersion = context.extension.packageJSON?.version ?? "dev";
+  const expectedMarker = `${expectedVersion}|${sourceStamp(bundledSrc)}`;
   const currentVersion = fs.existsSync(markerPath) ? fs.readFileSync(markerPath, "utf-8").trim() : "";
 
-  let needsInstall = currentVersion !== expectedVersion;
+  let needsInstall = currentVersion !== expectedMarker;
   if (!needsInstall) {
     try {
       await run(py, ["-m", "capacitor", "--help"], context.extensionPath, output);
@@ -110,7 +144,7 @@ export async function ensureBundledRuntime(
   if (needsInstall) {
     await run(py, ["-m", "pip", "install", "--upgrade", "pip"], context.extensionPath, output);
     await run(py, ["-m", "pip", "install", "--upgrade", `${bundledSrc}[llm,learn-auth]`], context.extensionPath, output);
-    fs.writeFileSync(markerPath, expectedVersion, "utf-8");
+    fs.writeFileSync(markerPath, expectedMarker, "utf-8");
   }
 
   const runtimeVersion = await runCapture(

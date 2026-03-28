@@ -19,6 +19,7 @@ import base64
 import json
 import logging
 import os
+import random
 import re
 import subprocess
 import time
@@ -83,8 +84,15 @@ def _parse_ms_date(date_str: str) -> Optional[str]:
 RATE_LIMIT_DELAY = 3            # seconds between search API calls
 MAX_RETRIES = 3
 RETRY_BACKOFF = [15, 30, 60]    # seconds per retry
-RESULTS_PER_QUERY = 100
+API_MAX_RETRIES = 3
+API_RETRY_BACKOFF = [5, 15, 30]
+RESULTS_PER_QUERY = 300
+MAX_FETCH_FILES_DEFAULT = 500   # hard cap on files fetched per run
+SLOW_MODE_SEARCH_DELAY = 8
+SLOW_MODE_API_DELAY = 0.5
 CACHE_TTL_HOURS = 24
+RATE_LIMIT_MAX_WAIT_SECONDS = max(30, int(os.getenv("CAPACITOR_GH_RATE_LIMIT_MAX_WAIT_SECONDS", "600")))
+RATE_LIMIT_SLEEP_CHUNK_SECONDS = max(5, int(os.getenv("CAPACITOR_GH_RATE_LIMIT_SLEEP_CHUNK_SECONDS", "30")))
 
 
 # ── repo-allowlist loader ─────────────────────────────────────────
@@ -120,6 +128,39 @@ def _load_repos_allowlist(repos_file: str | Path) -> Optional[Set[str]]:
     return allowed or None
 
 
+def _is_private_repo_variant(repo: str) -> bool:
+    """Return True for paired private repo names like ``owner/repo-pr``."""
+    repo_name = repo.split("/", 1)[-1]
+    return repo_name.endswith("-pr")
+
+
+def _canonical_repo_path_key(repo: str, path: str) -> str:
+    """Build a dedupe key that treats ``repo`` and ``repo-pr`` as the same file source."""
+    owner, sep, repo_name = repo.partition("/")
+    canonical_repo = repo
+    if sep and repo_name.endswith("-pr"):
+        canonical_repo = f"{owner}/{repo_name[:-3]}"
+    return f"{canonical_repo}/{path}"
+
+
+def _merge_repo_variant_hit(
+    selected_hits: Dict[str, Dict[str, str]],
+    item: Dict[str, str],
+) -> bool:
+    """Merge a hit into *selected_hits*, preferring public repos over ``-pr`` variants.
+
+    Returns True when a new canonical file key is added, False when only updated/skipped.
+    """
+    key = _canonical_repo_path_key(item["repo"], item["path"])
+    existing = selected_hits.get(key)
+    if existing is None:
+        selected_hits[key] = item
+        return True
+    if _is_private_repo_variant(existing["repo"]) and not _is_private_repo_variant(item["repo"]):
+        selected_hits[key] = item
+    return False
+
+
 # ── gh CLI helpers ────────────────────────────────────────────────
 
 def _check_gh_cli() -> None:
@@ -144,10 +185,119 @@ def _check_gh_cli() -> None:
         )
 
 
+def _parse_search_rate_limit_payload(payload: Dict[str, Any]) -> Dict[str, Optional[int] | str]:
+    """Extract search bucket details from ``gh api rate_limit`` payload."""
+    resources = payload.get("resources", {}) if isinstance(payload, dict) else {}
+    bucket_name = "code_search"
+    bucket = resources.get(bucket_name, {}) if isinstance(resources, dict) else {}
+    if not isinstance(bucket, dict) or bucket.get("remaining") is None:
+        bucket_name = "search"
+        bucket = resources.get(bucket_name, {}) if isinstance(resources, dict) else {}
+    if not isinstance(bucket, dict):
+        bucket = {}
+    remaining_raw = bucket.get("remaining")
+    reset_raw = bucket.get("reset")
+    limit_raw = bucket.get("limit")
+
+    def _as_int(value: Any) -> Optional[int]:
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return None
+
+    return {
+        "bucket": bucket_name,
+        "remaining": _as_int(remaining_raw),
+        "reset": _as_int(reset_raw),
+        "limit": _as_int(limit_raw),
+    }
+
+
+def _gh_search_rate_limit_status() -> Optional[Dict[str, Optional[int] | str]]:
+    """Return current ``code_search`` rate-limit state, falling back to ``search`` bucket."""
+    cmd = ["gh", "api", "rate_limit"]
+    result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+    if result.returncode != 0:
+        logger.warning("Unable to query gh rate_limit: %s", (result.stderr or "").strip())
+        return None
+    try:
+        payload = json.loads(result.stdout or "{}")
+    except json.JSONDecodeError:
+        logger.warning("Unable to parse gh rate_limit response")
+        return None
+    return _parse_search_rate_limit_payload(payload)
+
+
+def _wait_for_search_rate_limit(max_wait_seconds: int = RATE_LIMIT_MAX_WAIT_SECONDS) -> None:
+    """Gate ``gh search code`` requests when the search bucket is exhausted."""
+    status = _gh_search_rate_limit_status()
+    if not status:
+        return
+    remaining = status.get("remaining")
+    reset_epoch = status.get("reset")
+    bucket = status.get("bucket", "search")
+    if remaining is None or remaining > 0:
+        return
+    now = int(time.time())
+    if reset_epoch is None:
+        wait_seconds = min(max_wait_seconds, RATE_LIMIT_SLEEP_CHUNK_SECONDS)
+        print(
+            f" — {bucket} rate limit exhausted (remaining=0, reset unknown), waiting {wait_seconds}s…",
+            flush=True,
+        )
+        time.sleep(wait_seconds)
+        return
+    wait_until_reset = max(0, reset_epoch - now + 1)
+    wait_seconds = min(wait_until_reset, max_wait_seconds)
+    if wait_seconds <= 0:
+        return
+    if wait_seconds < wait_until_reset:
+        print(
+            f" — {bucket} rate limit exhausted; reset in {wait_until_reset}s, capped wait {wait_seconds}s…",
+            flush=True,
+        )
+    else:
+        print(
+            f" — {bucket} rate limit exhausted; waiting {wait_seconds}s for reset…",
+            flush=True,
+        )
+    remaining_wait = wait_seconds
+    while remaining_wait > 0:
+        sleep_for = min(remaining_wait, RATE_LIMIT_SLEEP_CHUNK_SECONDS)
+        time.sleep(sleep_for)
+        remaining_wait -= sleep_for
+
+
+def _is_retryable_search_error(result: subprocess.CompletedProcess[str]) -> bool:
+    """Return True for rate-limits/transient failures worth retrying."""
+    combined = f"{result.stderr or ''}\n{result.stdout or ''}".lower()
+    has_rate_marker = any(
+        marker in combined for marker in (
+            "rate limit",
+            "rate-limit",
+            "secondary rate",
+            "abuse detection",
+            "too many requests",
+            "api quota exceeded",
+        )
+    )
+    has_rate_status = bool(re.search(r"\b(403|429)\b", combined))
+    if has_rate_marker and has_rate_status:
+        return True
+    return any(token in combined for token in ("502", "503", "504", "timed out", "timeout"))
+
+
+def _retry_delay_seconds(attempt: int, backoff: List[int]) -> float:
+    """Backoff + small jitter for retries."""
+    base = backoff[attempt] if attempt < len(backoff) else backoff[-1] if backoff else 30
+    return float(base) + random.uniform(0, max(1.0, base * 0.1))
+
+
 def _gh_search_code(
     query: str,
     orgs: List[str],
     limit: int = RESULTS_PER_QUERY,
+    inter_org_delay: float = RATE_LIMIT_DELAY,
 ) -> List[Dict[str, str]]:
     """Run ``gh search code`` with org filters and return ``[{repo, path}]``."""
     all_hits: List[Dict[str, str]] = []
@@ -162,6 +312,7 @@ def _gh_search_code(
             "--limit", str(limit),
         ]
         for attempt in range(MAX_RETRIES + 1):
+            _wait_for_search_rate_limit()
             result = subprocess.run(
                 cmd, capture_output=True, text=True, timeout=60,
             )
@@ -184,16 +335,30 @@ def _gh_search_code(
                     })
                 print(f" — {len(items)} hits", flush=True)
                 break
-            # Rate-limited or transient error — retry with backoff
-            if attempt < MAX_RETRIES:
-                wait = RETRY_BACKOFF[attempt] if attempt < len(RETRY_BACKOFF) else 120
-                print(f" — rate limited, retrying in {wait}s…", flush=True)
+            retryable = _is_retryable_search_error(result)
+            if retryable and attempt < MAX_RETRIES:
+                wait = _retry_delay_seconds(attempt, RETRY_BACKOFF)
+                print(f" — retriable search error, retrying in {wait:.1f}s…", flush=True)
                 time.sleep(wait)
+                continue
+            err_text = (result.stderr or result.stdout or "").strip()
+            if retryable:
+                print(" — failed after retries", flush=True)
+                logger.warning(
+                    "Search failed after %d retries: %s (%s)",
+                    MAX_RETRIES,
+                    full_query,
+                    err_text[:300],
+                )
+            else:
+                print(" — non-retriable search error", flush=True)
+                logger.warning("Non-retriable search failure: %s (%s)", full_query, err_text[:300])
+            break
         else:
             print(" — failed after retries", flush=True)
             logger.warning("Search failed after %d retries: %s", MAX_RETRIES, full_query)
         # Rate-limit pause between org queries
-        time.sleep(RATE_LIMIT_DELAY)
+        time.sleep(inter_org_delay)
     return all_hits
 
 
@@ -208,17 +373,29 @@ def _gh_api_file(repo: str, path: str) -> Optional[Dict[str, str]]:
         "gh", "api", api_path,
         "-H", "Accept: application/vnd.github.v3+json",
     ]
-    result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
-    if result.returncode != 0:
+    for attempt in range(API_MAX_RETRIES + 1):
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+        if result.returncode == 0:
+            try:
+                data = json.loads(result.stdout)
+                content_b64 = (data.get("content") or "").replace("\n", "")
+                text = base64.b64decode(content_b64).decode("utf-8")
+                html_url = data.get("html_url", f"https://github.com/{repo}/blob/main/{path}")
+                return {"content": text, "html_url": html_url}
+            except Exception:
+                return None
+
+        if attempt < API_MAX_RETRIES:
+            stderr = (result.stderr or "").lower()
+            stdout = (result.stdout or "").lower()
+            combined = f"{stderr}\n{stdout}"
+            if "rate limit" in combined or "secondary rate" in combined or "502" in combined:
+                wait = API_RETRY_BACKOFF[attempt] if attempt < len(API_RETRY_BACKOFF) else 45
+                print(f"    gh api rate-limited for {repo}/{path}, retrying in {wait}s…", flush=True)
+                time.sleep(wait)
+                continue
         return None
-    try:
-        data = json.loads(result.stdout)
-        content_b64 = (data.get("content") or "").replace("\n", "")
-        text = base64.b64decode(content_b64).decode("utf-8")
-        html_url = data.get("html_url", f"https://github.com/{repo}/blob/main/{path}")
-        return {"content": text, "html_url": html_url}
-    except Exception:
-        return None
+    return None
 
 
 # ── raw.githubusercontent fallback (tracker mode) ─────────────────
@@ -303,6 +480,8 @@ class GitHubSearchCollector(BaseCollector):
         allowed_repos: List[str] | None = None,
         dry_run: bool = False,
         date_filter: Dict[str, str] | None = None,
+        max_fetch_files: int = MAX_FETCH_FILES_DEFAULT,
+        slow_mode: bool = False,
     ):
         self.tracker_path = Path(tracker_path) if tracker_path else None
         self.excluded_repos = set(excluded_repos) if excluded_repos else set()
@@ -315,6 +494,8 @@ class GitHubSearchCollector(BaseCollector):
         if allowed_repos:
             self.allowed_repos = {r.lower() for r in allowed_repos}
         self.dry_run = dry_run
+        self.max_fetch_files = max(1, int(max_fetch_files))
+        self.slow_mode = bool(slow_mode)
         # date_filter: {"after": "MM/DD/YYYY" or "YYYY-MM-DD", "before": ..., "mode": "exclude"|"flag"}
         self.date_filter = date_filter or {}
         # Normalize config dates so users can write either MM/DD/YYYY or YYYY-MM-DD
@@ -349,16 +530,22 @@ class GitHubSearchCollector(BaseCollector):
         assert self.tracker_path is not None
         tracker = json.loads(self.tracker_path.read_text(encoding="utf-8"))
         files = tracker.get("files", [])
+        selected_hits: Dict[str, Dict[str, str]] = {}
+        for entry in files:
+            repo = entry["repo"]
+            path = entry["path"]
+            if repo in self.excluded_repos:
+                continue
+            _merge_repo_variant_hit(selected_hits, {"repo": repo, "path": path})
 
         filter_mode = self.date_filter.get("mode", "exclude")
         date_after = self.date_filter.get("after")
         date_before = self.date_filter.get("before")
 
-        for i, entry in enumerate(files, 1):
+        tracker_hits = list(selected_hits.values())[: self.max_fetch_files]
+        for i, entry in enumerate(tracker_hits, 1):
             repo = entry["repo"]
             path = entry["path"]
-            if repo in self.excluded_repos:
-                continue
             result = _fetch_raw_file(repo, path)
             if result:
                 # Extract ms.date from content
@@ -422,28 +609,35 @@ class GitHubSearchCollector(BaseCollector):
         if self.use_cache and cache_path:
             cached = _load_search_cache(cache_path, cache_key)
             if cached is not None:
-                yield from cached
+                if len(cached) > self.max_fetch_files:
+                    logger.info(
+                        "Using first %d cached pages out of %d total (max_fetch_files)",
+                        self.max_fetch_files,
+                        len(cached),
+                    )
+                yield from cached[: self.max_fetch_files]
                 return
 
         # Verify gh CLI
         _check_gh_cli()
+        search_delay = SLOW_MODE_SEARCH_DELAY if self.slow_mode else RATE_LIMIT_DELAY
+        api_delay = SLOW_MODE_API_DELAY if self.slow_mode else 0.0
+        if self.slow_mode:
+            print("  GitHub slow mode enabled (extra throttling to reduce API rate limits)")
 
         # Search phase — deduplicate across queries
-        seen: Set[str] = set()
-        hits: List[Dict[str, str]] = []
+        selected_hits: Dict[str, Dict[str, str]] = {}
 
         logger.info("Searching GitHub orgs: %s", ", ".join(self.orgs))
         search_count = 0
+        limit_reached = False
         for q in self.queries:
             search_count += 1
             logger.info("[%d/%d] %s", search_count, len(self.queries), q[:80])
-            results = _gh_search_code(q, self.orgs)
+            results = _gh_search_code(q, self.orgs, inter_org_delay=search_delay)
             for item in results:
                 repo = item["repo"]
                 path = item["path"]
-                key = f"{repo}/{path}"
-                if key in seen:
-                    continue
                 if repo in self.excluded_repos:
                     continue
                 repo_short = repo.split("/")[-1].lower()
@@ -455,16 +649,30 @@ class GitHubSearchCollector(BaseCollector):
                 elif file_allowlist and repo.startswith("MicrosoftDocs/"):
                     if repo_short not in file_allowlist:
                         continue
-                seen.add(key)
-                hits.append(item)
+                is_new = _merge_repo_variant_hit(selected_hits, item)
+                if is_new and len(selected_hits) >= self.max_fetch_files:
+                    limit_reached = True
+                    logger.info(
+                        "Reached max_fetch_files=%d — stopping search phase early",
+                        self.max_fetch_files,
+                    )
+                    break
+            if limit_reached:
+                break
             # Rate-limit between queries
-            time.sleep(RATE_LIMIT_DELAY)
+            time.sleep(search_delay)
 
+        hits: List[Dict[str, str]] = list(selected_hits.values())
         logger.info("Unique hits after dedup: %d", len(hits))
+        print(f"  Unique GitHub files queued for fetch: {len(hits)} (cap: {self.max_fetch_files})")
 
         # Fetch phase
         pages: List[Dict[str, Any]] = []
-        for i, hit in enumerate(hits):
+        for i, hit in enumerate(hits, 1):
+            if i == 1 or i % 25 == 0 or i == len(hits):
+                print(f"  Fetching GitHub file content: {i}/{len(hits)}", flush=True)
+            if api_delay:
+                time.sleep(api_delay)
             file_data = _gh_api_file(hit["repo"], hit["path"])
             if file_data:
                 content = file_data["content"]
@@ -500,8 +708,8 @@ class GitHubSearchCollector(BaseCollector):
 
                 pages.append(page)
                 yield page
-            if (i + 1) % 10 == 0:
-                logger.info("Fetched %d/%d files", i + 1, len(hits))
+            if i % 10 == 0:
+                logger.info("Fetched %d/%d files", i, len(hits))
 
         if self.date_skipped:
             logger.info("Skipped %d files outside date range", self.date_skipped)

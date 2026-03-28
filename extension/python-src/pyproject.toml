@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "docs-capacitor"
-version = "0.1.12"
+version = "0.1.15"
 description = "Configurable documentation freshness detection pipeline for Microsoft Docs"
 readme = "README.md"
 requires-python = ">=3.9"

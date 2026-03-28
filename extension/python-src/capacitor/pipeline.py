@@ -84,6 +84,8 @@ class Pipeline:
             allowed_repos=gh_cfg.get("allowed_repos"),
             dry_run=gh_cfg.get("dry_run", False),
             date_filter=gh_cfg.get("date_filter"),
+            max_fetch_files=gh_cfg.get("max_fetch_files", 500),
+            slow_mode=gh_cfg.get("slow_mode", False),
         )
 
     def _build_learn_collector(self) -> Any:

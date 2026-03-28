@@ -18,13 +18,15 @@ search:
       - mspnp
     queries:
       - Visual Studio 20
-      - Visual Studio
+      - Visual Studio 2022
       - Visual Studio 2019
       - Visual Studio 2017
-      - Visual Studio 2026
     date_filter:
       after: 01/01/2020
       mode: exclude
+    use_cache: true
+    slow_mode: true
+    max_fetch_files: 220
     excluded_repos:
       - MicrosoftDocs/visualstudio-archive-docs-pr
       - MicrosoftDocs/CordovaDocs

@@ -41,6 +41,15 @@ SCENARIO_SCHEMA: Dict[str, Any] = {
                         "queries": {"type": "array", "items": {"type": "string"}},
                         "excluded_repos": {"type": "array", "items": {"type": "string"}},
                         "allowed_repos": {"type": "array", "items": {"type": "string"}},
+                        "max_fetch_files": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "description": "Maximum number of matched GitHub files to fetch per run.",
+                        },
+                        "slow_mode": {
+                            "type": "boolean",
+                            "description": "Enable extra throttling and retries to reduce GitHub API rate-limit errors.",
+                        },
                         "tracker": {"type": "string"},
                         "date_filter": {
                             "type": "object",
