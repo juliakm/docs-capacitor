@@ -1,6 +1,8 @@
-# Docs Capacitor — VS Code Extension
+# Docs Capacitor: Global Search and Replace — VS Code Extension
 
-A VS Code extension that provides a GUI for the **docs-capacitor** documentation freshness pipeline. Detect outdated API versions, deprecated CLI commands, and stale references in Microsoft Learn documentation.
+Search Microsoft Learn for outdated content and generate prioritized reports — powered by configurable scenarios that combine regex rules and LLM analysis.
+
+Docs Capacitor searches the Learn Knowledge Service and GitHub across thousands of documentation articles to find content that references outdated product instructions, deprecated tasks, or stale branding. Each search is driven by a **scenario** — a YAML file that defines what to look for, where to search, and how to classify findings.
 
 ## Prerequisites
 
