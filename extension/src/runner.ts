@@ -21,6 +21,7 @@ const PROGRESS_PATTERNS: Array<{ re: RegExp; message: (m: RegExpMatchArray) => s
   { re: /Collecting from:\s*(.+)/i, message: (m) => `Collecting from ${m[1]}…` },
   { re: /Learn search:\s*(\d+) total/i, message: (m) => `Learn search: ${m[1]} results found` },
   { re: /\[(\d+)\/(\d+)\]\s*gh search/i, message: (m) => `GitHub search (${m[1]}/${m[2]})…` },
+  { re: /\[(\d+)\/(\d+)\]\s+(?:https?:\/\/|\(cached\))/i, message: (m) => `LLM: checking page ${m[1]}/${m[2]}…` },
   { re: /\[(\d+)\/(\d+)\]/i, message: (m) => `Searching… (${m[1]}/${m[2]})` },
   { re: /Collected (\d+) pages from (\w+)/i, message: (m) => `${m[2]}: ${m[1]} pages collected` },
   { re: /Total pages collected:\s*(\d+)/i, message: (m) => `${m[1]} pages collected — detecting…` },

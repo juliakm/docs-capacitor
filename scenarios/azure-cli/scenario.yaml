@@ -78,6 +78,7 @@ detection:
       - "Service principal login should use `az login --service-principal` with federated credentials or certificates, not passwords."
     max_article_chars: 8000
     rate_limit_rpm: 10
+    max_pages: 150
 
 classification:
   strategy: strategy.yaml

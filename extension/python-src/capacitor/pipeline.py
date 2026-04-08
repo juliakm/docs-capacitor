@@ -197,6 +197,7 @@ class Pipeline:
             section_key=rn_cfg.get("section_key", "product_sections"),
             max_article_chars=llm_cfg.get("max_article_chars", 8000),
             rate_limit_rpm=llm_cfg.get("rate_limit_rpm", 10),
+            max_pages=llm_cfg.get("max_pages"),
             scope_product_patterns=self.config.scope_product_patterns,
             scope_tool_patterns=self.config.scope_tool_patterns,
         )
@@ -236,7 +237,7 @@ class Pipeline:
             self.release_notes = {}
             return self.release_notes
 
-        print(f"Fetching release notes from {url}")
+        print(f"Fetching release notes from {url}", flush=True)
         html = fetch_page(url)
         sections = extract_sections(html, section_pattern) if section_pattern else []
         self.release_notes = build_snapshot(
@@ -247,7 +248,7 @@ class Pipeline:
         self.out_dir.mkdir(parents=True, exist_ok=True)
         snapshot_path = self.out_dir / "release_notes_snapshot.json"
         snapshot_path.write_text(json.dumps(self.release_notes, indent=2), encoding="utf-8")
-        print(f"Saved release notes snapshot ({len(self.release_notes.get(section_key, []))} sections)")
+        print(f"Saved release notes snapshot ({len(self.release_notes.get(section_key, []))} sections)", flush=True)
         return self.release_notes
 
     @staticmethod
@@ -276,7 +277,7 @@ class Pipeline:
         self._date_skipped = 0
         dedup_count = 0
         for source in sources:
-            print(f"Collecting from: {source}")
+            print(f"Collecting from: {source}", flush=True)
             if source == "github":
                 collector = self._build_github_collector()
             elif source == "learn":
@@ -304,10 +305,10 @@ class Pipeline:
                     self._seen_urls.add(norm)
                 self.pages.append(page)
                 added += 1
-            print(f"  Collected {len(pages)} pages from {source} ({added} new)")
+            print(f"  Collected {len(pages)} pages from {source} ({added} new)", flush=True)
         if dedup_count:
-            print(f"  Deduplicated {dedup_count} duplicate page(s)")
-        print(f"Total pages collected: {len(self.pages)}")
+            print(f"  Deduplicated {dedup_count} duplicate page(s)", flush=True)
+        print(f"Total pages collected: {len(self.pages)}", flush=True)
         return self.pages
 
     def _available_detectors(self) -> List[str]:
@@ -325,7 +326,7 @@ class Pipeline:
         detectors = detectors or self._available_detectors()
         self.findings = []
         for det_name in detectors:
-            print(f"Running detector: {det_name}")
+            print(f"Running detector: {det_name}", flush=True)
             if det_name == "regex":
                 detector = self._build_regex_detector()
             elif det_name == "llm":
@@ -337,14 +338,14 @@ class Pipeline:
                 print(f"  {det_name} detector not available, skipping")
                 continue
             results = detector.detect(self.pages, emit_all=emit_all)
-            print(f"  {det_name} found {len(results)} findings")
+            print(f"  {det_name} found {len(results)} findings", flush=True)
             self.findings.extend(results)
-        print(f"Total findings: {len(self.findings)}")
+        print(f"Total findings: {len(self.findings)}", flush=True)
         return self.findings
 
     def classify(self, *, areas: list[str] | None = None) -> List[Dict[str, Any]]:
         """Run classifier stage."""
-        print("Classifying findings")
+        print("Classifying findings", flush=True)
         classifier = self._build_classifier(areas)
         if classifier is None:
             print("  Classifier not available")
@@ -379,7 +380,7 @@ class Pipeline:
                 date_skipped=getattr(self, "_date_skipped", 0),
                 file_suffix=file_suffix,
             )
-            print(f"Report written: {path}")
+            print(f"Report written: {path}", flush=True)
             paths.append(path)
         return paths
 

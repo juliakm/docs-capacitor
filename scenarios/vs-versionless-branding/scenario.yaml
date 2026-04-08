@@ -210,6 +210,7 @@ detection:
       - If the content is about a deprecated, retired, or archived version of Visual Studio, it should not be flagged because we do not want to update old content that is no longer maintained. However, if the content is actively maintained and references a specific version of Visual Studio without a valid reason, it should be flagged for review.
     max_article_chars: 8000
     rate_limit_rpm: 10
+    max_pages: 150
 classification:
   strategy: strategy.yaml
   scope:

@@ -229,6 +229,7 @@ class LLMDetector(BaseDetector):
         rate_limit_rpm: int = 10,
         scope_product_patterns: List[str] | None = None,
         scope_tool_patterns: List[str] | None = None,
+        max_pages: int | None = None,
     ):
         # Auto-detect provider if not explicitly set
         if provider:
@@ -260,6 +261,7 @@ class LLMDetector(BaseDetector):
         self.request_delay = 60.0 / rate_limit_rpm if rate_limit_rpm > 0 else 6.0
         self.scope_product_patterns = scope_product_patterns or []
         self.scope_tool_patterns = scope_tool_patterns or []
+        self.max_pages = max_pages
 
     def _is_configured(self) -> bool:
         try:
@@ -318,7 +320,7 @@ class LLMDetector(BaseDetector):
                 self.skip_url_patterns,
             )
         ]
-        print(f"  LLM conflict check: {len(relevant)} URL-relevant pages ({len(pages) - len(relevant)} skipped by URL)")
+        print(f"  LLM conflict check: {len(relevant)} URL-relevant pages ({len(pages) - len(relevant)} skipped by URL)", flush=True)
 
         # Scope pre-filter: only send pages to LLM that mention the target
         # product AND tool, matching the classifier's scope check.
@@ -332,7 +334,29 @@ class LLMDetector(BaseDetector):
                     self.scope_tool_patterns,
                 )
             ]
-            print(f"  LLM scope filter: {len(relevant)} in-scope pages ({before - len(relevant)} skipped by content)")
+            print(f"  LLM scope filter: {len(relevant)} in-scope pages ({before - len(relevant)} skipped by content)", flush=True)
+
+        # Split into cached vs uncached so cached pages are always processed
+        # and max_pages only limits new LLM calls.
+        if self.max_pages is not None:
+            cached_pages = []
+            uncached_pages = []
+            for p in relevant:
+                ck = _cache_key(p.get("url", ""), p.get("text", ""), key_facts, self.max_article_chars)
+                if self.use_cache and self.cache_dir is not None and _get_cached(self.cache_dir, ck) is not None:
+                    cached_pages.append(p)
+                else:
+                    uncached_pages.append(p)
+            if len(uncached_pages) > self.max_pages:
+                print(
+                    f"  LLM page cap: {len(cached_pages)} cached (free) + {self.max_pages}/{len(uncached_pages)} uncached pages"
+                    f" — re-run to process more",
+                    flush=True,
+                )
+                uncached_pages = uncached_pages[: self.max_pages]
+            else:
+                print(f"  LLM page cap: {len(cached_pages)} cached (free) + {len(uncached_pages)} uncached pages", flush=True)
+            relevant = cached_pages + uncached_pages
 
         all_findings: List[Dict[str, Any]] = []
         for i, page in enumerate(relevant):
@@ -345,19 +369,19 @@ class LLMDetector(BaseDetector):
                 and self.cache_dir is not None
                 and _get_cached(self.cache_dir, ck) is not None
             )
-            print(f"    [{i + 1}/{len(relevant)}] {'(cached) ' if hit else ''}{url}")
+            print(f"    [{i + 1}/{len(relevant)}] {'(cached) ' if hit else ''}{url}", flush=True)
 
             try:
                 findings = self._check_page(url, text, key_facts, ck)
             except Exception as e:
-                print(f"      Warning: {e}")
+                print(f"      Warning: {e}", flush=True)
                 findings = []
 
             if findings:
-                print(f"      Found {len(findings)} conflict(s)")
+                print(f"      Found {len(findings)} conflict(s)", flush=True)
                 all_findings.extend(findings)
             else:
-                print(f"      No conflicts")
+                print(f"      No conflicts", flush=True)
 
             if not hit and i < len(relevant) - 1:
                 time.sleep(self.request_delay)

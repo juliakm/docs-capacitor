@@ -34,6 +34,7 @@ detection:
       - "Validate all pipeline inputs and parameters to prevent injection attacks."
     max_article_chars: 8000
     rate_limit_rpm: 30
+    max_pages: 150
 classification:
   strategy: strategy.yaml
   scope:
