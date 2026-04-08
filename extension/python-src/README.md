@@ -1,29 +1,19 @@
-# Docs Capacitor: Global Search and Replace
+# docs-capacitor
 
-Search Microsoft Learn for outdated content and generate prioritized reports — powered by configurable scenarios that combine regex rules and LLM analysis.
+Configurable documentation freshness detection pipeline for Microsoft Docs.
 
-## What it does
+Find outdated references, stale instructions, and incorrect links across any set of documentation repositories — fully customizable via YAML scenario files.
 
-Docs Capacitor searches the Learn Knowledge Service and GitHub across thousands of documentation articles to find content that references outdated product instructions, deprecated tasks, or stale branding. Each search is driven by a **scenario** — a YAML file that defines what to look for, where to search, and how to classify findings.
+## Architecture
 
-**Built-in scenarios include:**
-- `copilot-vs/` — GitHub Copilot install instructions for Visual Studio (built-in since VS 2022 17.10+)
-- `outdated-devops-tasks/` — Deprecated Azure DevOps pipeline tasks
-- `vs-versionless-branding/` — Incorrect Visual Studio version-specific branding
-- `azure-cli/` — Outdated Azure CLI command references
-- `security-devops/` — Security and DevOps tooling references
-- `starter/` — Minimal template for creating your own scenario
-
-## Pipeline
-
-**4 stages:** Collect → Detect → Classify → Report
+**4-stage pipeline:** Collect → Detect → Classify → Report
 
 | Stage | What it does |
 |-------|-------------|
-| **Collect** | Search the Learn Knowledge Service API and GitHub (across MicrosoftDocs and related orgs) |
-| **Detect** | Apply regex rules and LLM prompts to identify issues in each article |
-| **Classify** | Assign severity: `P0_OUTDATED`, `NEEDS_CLARIFICATION`, `UP_TO_DATE`, or `EXCLUDED` |
-| **Report** | Generate Markdown, CSV, and JSON reports with prioritized findings |
+| **Collect** | Search for docs pages via GitHub CLI or Learn API |
+| **Detect** | Find issues using regex rules and/or LLM analysis |
+| **Classify** | Assign severity (P0_OUTDATED, NEEDS_CLARIFICATION, UP_TO_DATE, EXCLUDED) |
+| **Report** | Generate Markdown and CSV reports |
 
 ## Quick Start
 
@@ -31,7 +21,7 @@ Docs Capacitor searches the Learn Knowledge Service and GitHub across thousands 
 # Install
 pip install -e .
 
-# Run a scenario
+# Run with a scenario
 capacitor check --scenario scenarios/copilot-vs/scenario.yaml
 
 # Check a single article
@@ -43,27 +33,27 @@ capacitor validate --scenario scenarios/copilot-vs/scenario.yaml
 
 ## Scenarios
 
-Everything domain-specific lives in a **scenario file** — a YAML that defines the product, search queries, regex rules, LLM key facts, URL filters, and classification strategy.
+Everything domain-specific lives in a **scenario file** — a single YAML that defines what product you're checking, where to search, what patterns to look for, and how to classify findings.
 
-Each scenario folder contains:
-- `scenario.yaml` — search targets, URL filters, LLM key facts, reporting config
-- `rules.yaml` — regex patterns for fast pre-filtering
-- `strategy.yaml` — classification logic and severity thresholds
+See `scenarios/` for examples:
+- `copilot-vs/` — GitHub Copilot install path checker
+- `starter/` — Minimal template for creating your own
 
 ## Creating Your Own Scenario
 
 ```bash
+# Start from the template
 cp -r scenarios/starter scenarios/my-check
-# Edit scenarios/my-check/scenario.yaml
+# Edit scenarios/my-check/scenario.yaml with your product details
 capacitor validate --scenario scenarios/my-check/scenario.yaml
 capacitor check --scenario scenarios/my-check/scenario.yaml
 ```
 
 ## VS Code Extension
 
-The VS Code extension (see `extension/`) provides a GUI for managing scenarios, running checks, and browsing results without leaving your editor.
+See `extension/` for the VS Code extension that provides a GUI for managing scenarios and viewing results.
 
-For install, quick-start, and troubleshooting, see `extension/README.md`.
+For install, quick-start, and troubleshooting instructions used by coworkers, see `extension/README.md`.
 
 ## Release & artifact hygiene
 

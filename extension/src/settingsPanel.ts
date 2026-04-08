@@ -393,11 +393,11 @@ export class SettingsPanel {
 <!-- ── Learn Knowledge Service ─────────────────────────────── -->
 <div class="card" id="section-learn">
   <h2>Learn Knowledge Service</h2>
-  <p id="learnStatusText" class="detail">Usually auto-configured from your scenario. Most users should not need to enter URLs manually.</p>
-  <label for="learnKnowledgeServiceUrlInput">Service URL</label>
-  <input type="text" id="learnKnowledgeServiceUrlInput" placeholder="https://your-learn-service.contoso.com" />
-  <label for="learnKnowledgeServiceScopeInput">Azure scope</label>
-  <input type="text" id="learnKnowledgeServiceScopeInput" placeholder="api://your-app-id/.default" />
+  <p id="learnStatusText" class="detail">⬇️ <strong>Most users: leave these fields blank.</strong> The extension falls back to public learn.microsoft.com search automatically. Only fill these in if you have been given a private Learn service URL.</p>
+  <label for="learnKnowledgeServiceUrlInput">Service URL <span style="font-weight:normal;color:var(--vscode-descriptionForeground)">(optional — leave blank for public Learn)</span></label>
+  <input type="text" id="learnKnowledgeServiceUrlInput" placeholder="Leave blank unless using internal Learn service" />
+  <label for="learnKnowledgeServiceScopeInput">Azure scope <span style="font-weight:normal;color:var(--vscode-descriptionForeground)">(optional — leave blank for public Learn)</span></label>
+  <input type="text" id="learnKnowledgeServiceScopeInput" placeholder="Leave blank unless using internal Learn service" />
   <label for="usePublicLearnFallbackInput">Fallback to public Learn search if internal Learn auth fails</label>
   <input type="checkbox" id="usePublicLearnFallbackInput" checked />
   <div style="margin-top:8px">
@@ -417,18 +417,20 @@ export class SettingsPanel {
   <p class="detail">Required: Python 3.9+ with the <code>docs-capacitor[llm]</code> package installed.</p>
   <input type="text" id="pythonPathInput" placeholder="python" />
 
+  <label>Scenario Paths <span style="font-weight:normal;color:var(--vscode-descriptionForeground)">(required — the extension won't show scenarios until at least one path is set)</span></label>
+  <p class="detail">Add the absolute path to the folder containing your <code>scenario.yaml</code> files (e.g. <code>/Users/you/docs-capacitor/scenarios</code>).</p>
+  <ul class="path-list" id="scenarioPathsList"></ul>
+  <div class="add-path-row">
+    <input type="text" id="newPathInput" placeholder="path/to/scenarios (or C:\\path\\to\\scenarios)" />
+    <button id="btnAddPath" class="secondary">Add</button>
+  </div>
+
   <details class="advanced-wrap">
     <summary>Advanced environment settings (optional)</summary>
 
   <label for="timeoutInput">Timeout (ms)</label>
   <input type="number" id="timeoutInput" placeholder="300000" min="1000" step="1000" />
 
-  <label>Scenario Paths</label>
-  <ul class="path-list" id="scenarioPathsList"></ul>
-  <div class="add-path-row">
-    <input type="text" id="newPathInput" placeholder="path/to/scenarios (or C:\\path\\to\\scenarios)" />
-    <button id="btnAddPath" class="secondary">Add</button>
-  </div>
   </details>
 
   <div style="margin-top:12px">
