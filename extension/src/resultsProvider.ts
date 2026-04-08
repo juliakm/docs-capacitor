@@ -227,7 +227,7 @@ export class ResultsProvider implements vscode.TreeDataProvider<ResultItem> {
 
     // On some Windows runs, result files appear moments after process exit.
     // Retry briefly so users don't need manual "Load Results from File".
-    const retryDelays = [400, 1200];
+    const retryDelays = [400, 1200, 2500];
     for (const delay of retryDelays) {
       const timer = setTimeout(() => {
         if (this.activeScenario !== scenarioName || this.results.length > 0) {
@@ -323,8 +323,12 @@ export class ResultsProvider implements vscode.TreeDataProvider<ResultItem> {
         const stat = fs.statSync(resolved);
         if (stat.isFile()) {
           if (/scenario\.ya?ml$/i.test(path.basename(resolved))) {
-            // <...>/<scenario>/scenario.yaml -> <...>/output
-            addCandidate(path.join(path.dirname(path.dirname(resolved)), "output"));
+            // <repo>/<scenarios>/<scenario>/scenario.yaml → <repo>/output
+            // dirname×1 = scenario dir, dirname×2 = scenarios dir, dirname×3 = repo root
+            addCandidate(path.join(path.dirname(path.dirname(path.dirname(resolved))), "output"));
+            // Backward-compat fallbacks: treat the scenario dir as the base
+            addCandidate(path.join(path.dirname(resolved), "..", "output"));
+            addCandidate(path.join(path.dirname(resolved), "output"));
           }
         } else if (stat.isDirectory()) {
           const directScenario = ["scenario.yaml", "scenario.yml"]
@@ -620,7 +624,11 @@ export class ResultsProvider implements vscode.TreeDataProvider<ResultItem> {
     if (!this.treeView) { return; }
     const all = this.results;
     if (all.length === 0) {
-      this.treeView.message = "No results loaded. Run a freshness check first.";
+      if (this.activeScenario) {
+        this.treeView.message = `No actionable findings for ${this.activeScenario} — all pages are up to date.`;
+      } else {
+        this.treeView.message = "No results yet — run a freshness check to see findings here.";
+      }
       return;
     }
     const outdated = all.filter((r) => r.classification === "P0_OUTDATED").length;

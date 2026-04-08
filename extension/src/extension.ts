@@ -646,7 +646,24 @@ export function activate(context: vscode.ExtensionContext): void {
           const now = new Date().toLocaleTimeString();
           statusBarItem.text = `$(beaker) Capacitor ✓ ${now}`;
           statusBarItem.tooltip = `Last check: ${scenarioName} at ${now}`;
-          vscode.window.showInformationMessage(`✅ Freshness check complete for ${scenarioName} — see Results panel.`);
+
+          // Check if CSV has content beyond the header row
+          const csvPath = path.join(outputDir, "report.csv");
+          let csvIsEmpty = false;
+          try {
+            const lines = fs.readFileSync(csvPath, "utf-8").trim().split("\n");
+            csvIsEmpty = lines.length <= 1;
+          } catch { /* ignore — CSV may not exist yet */ }
+
+          if (csvIsEmpty) {
+            vscode.window.showInformationMessage(
+              `✅ Freshness check complete for ${scenarioName} — no outdated content found.`,
+            );
+          } else {
+            vscode.window.showInformationMessage(
+              `✅ Freshness check complete for ${scenarioName} — see Results panel.`,
+            );
+          }
           resultsProvider.loadScenario(scenarioName);
         } else {
           statusBarItem.text = "$(beaker) Capacitor ✗ Failed";

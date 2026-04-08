@@ -2,7 +2,7 @@
   "name": "docs-capacitor",
   "displayName": "Docs Capacitor: Global Search and Replace",
   "description": "Detect outdated references in Microsoft Learn documentation",
-  "version": "0.1.16",
+  "version": "0.1.17",
   "publisher": "microsoft",
   "license": "MIT",
   "engines": {
